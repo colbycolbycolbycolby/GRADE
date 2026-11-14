@@ -1,0 +1,14 @@
+{
+  "name": "steps_f",
+  "boundaries": [
+    21.6,
+    43.2
+  ],
+  "cropStart": 0.0,
+  "cropEnd": 64.8,
+  "sections": [
+    "low",
+    "mid",
+    "high"
+  ]
+}

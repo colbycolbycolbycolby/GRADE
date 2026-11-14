@@ -1,0 +1,13 @@
+{
+  "1": {
+    "recall": 0.957,
+    "per_song": {
+      "pop_a": 1.0,
+      "edm_b": 1.0,
+      "ballad_c": 1.0,
+      "rock_d": 0.8,
+      "silence_e": 1.0,
+      "steps_f": 1.0
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "edm_b",
+  "boundaries": [
+    15.0,
+    30.0,
+    45.0,
+    60.0
+  ],
+  "cropStart": 0.0,
+  "cropEnd": 75.0,
+  "sections": [
+    "intro",
+    "build",
+    "drop",
+    "break",
+    "drop"
+  ]
+}

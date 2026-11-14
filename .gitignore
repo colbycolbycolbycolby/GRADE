@@ -1,0 +1,15 @@
+node_modules
+dist
+.venv
+__pycache__
+.pytest_cache
+.mypy_cache
+.ruff_cache
+apps/server/data
+.env
+apps/server/tests/fixtures/generated
+
+grade-data-backup-*
+GRADE% Encoded Songs/
+GRADE% Encoded Songs/
+.DS_Store

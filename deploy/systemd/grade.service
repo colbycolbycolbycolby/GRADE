@@ -1,0 +1,32 @@
+[Unit]
+Description=GRADE cycling instructor application
+After=network.target
+
+[Service]
+Type=simple
+User=grade
+Group=grade
+WorkingDirectory=/opt/grade/app/apps/server
+EnvironmentFile=/etc/grade/grade.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/grade/venv/bin/uvicorn api.app:create_app --factory --host 127.0.0.1 --port 8000
+
+Nice=10
+CPUWeight=25
+CPUQuota=100%
+MemoryHigh=900M
+MemoryMax=1200M
+OOMPolicy=stop
+Restart=on-failure
+RestartSec=5
+
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/grade
+InaccessiblePaths=-/opt/cvm-poc
+
+[Install]
+WantedBy=multi-user.target

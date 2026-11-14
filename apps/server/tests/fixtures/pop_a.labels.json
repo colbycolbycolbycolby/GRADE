@@ -1,0 +1,20 @@
+{
+  "name": "pop_a",
+  "boundaries": [
+    8.0,
+    20.0,
+    32.0,
+    44.0,
+    56.0
+  ],
+  "cropStart": 0.0,
+  "cropEnd": 62.0,
+  "sections": [
+    "intro",
+    "verse",
+    "chorus",
+    "verse",
+    "chorus",
+    "outro"
+  ]
+}

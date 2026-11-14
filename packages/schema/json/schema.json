@@ -1,0 +1,366 @@
+{
+  "$ref": "#/definitions/ProgramFile",
+  "definitions": {
+    "Track": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^(file:[0-9a-f]{64}|yt:[A-Za-z0-9_-]{11}|mic:.+)$"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "file",
+            "youtube",
+            "mic"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "title",
+        "duration",
+        "aliases"
+      ],
+      "additionalProperties": false
+    },
+    "Analysis": {
+      "type": "object",
+      "properties": {
+        "trackId": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duration": {
+          "$ref": "#/definitions/Track/properties/duration"
+        },
+        "energy": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "t": {
+                "$ref": "#/definitions/Track/properties/duration"
+              },
+              "e": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            },
+            "required": [
+              "t",
+              "e"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "bpm": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "beats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Track/properties/duration"
+          }
+        },
+        "downbeats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Track/properties/duration"
+          }
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Track/properties/duration"
+          }
+        },
+        "structure": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "intro",
+                  "outro",
+                  "section"
+                ]
+              },
+              "similarTo": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "cropStart": {
+          "$ref": "#/definitions/Track/properties/duration"
+        },
+        "cropEnd": {
+          "$ref": "#/definitions/Track/properties/duration"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "trackId",
+        "version",
+        "duration",
+        "energy",
+        "boundaries",
+        "cropStart",
+        "cropEnd",
+        "createdAt"
+      ],
+      "additionalProperties": false
+    },
+    "Segment": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "start": {
+          "$ref": "#/definitions/Track/properties/duration"
+        },
+        "end": {
+          "$ref": "#/definitions/Track/properties/duration"
+        },
+        "tier": {
+          "type": "string",
+          "enum": [
+            "easy",
+            "moderate",
+            "hard",
+            "allout"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "intro",
+            "outro",
+            "section"
+          ]
+        },
+        "similarTo": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "start",
+        "end",
+        "tier",
+        "label",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "Clip": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "segmentId": {
+          "type": "string"
+        },
+        "start": {
+          "$ref": "#/definitions/Track/properties/duration"
+        },
+        "end": {
+          "$ref": "#/definitions/Track/properties/duration"
+        }
+      },
+      "required": [
+        "id",
+        "segmentId",
+        "start",
+        "end"
+      ],
+      "additionalProperties": false
+    },
+    "Program": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "trackId": {
+          "type": "string"
+        },
+        "analysisVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Segment"
+          },
+          "minItems": 1
+        },
+        "clips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Clip"
+          },
+          "minItems": 1
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "trackId",
+        "analysisVersion",
+        "segments",
+        "clips",
+        "updatedAt"
+      ],
+      "additionalProperties": false
+    },
+    "ProgramFile": {
+      "$ref": "#/definitions/ProgramFile"
+    },
+    "ClassPlan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "programIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "programIds"
+      ],
+      "additionalProperties": false
+    },
+    "ApiError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "IngestYoutubeRequest": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "IngestResponse": {
+      "type": "object",
+      "properties": {
+        "jobId": {
+          "type": "string"
+        },
+        "trackId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "jobId",
+        "trackId"
+      ],
+      "additionalProperties": false
+    },
+    "JobStatus": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "running",
+            "done",
+            "error"
+          ]
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "error": {
+          "$ref": "#/definitions/ApiError"
+        },
+        "trackId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "progress",
+        "trackId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

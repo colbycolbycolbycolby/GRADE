@@ -1,0 +1,20 @@
+{
+  "name": "rock_d",
+  "boundaries": [
+    10.286,
+    24.0,
+    37.714,
+    51.429,
+    65.143
+  ],
+  "cropStart": 0.0,
+  "cropEnd": 78.857,
+  "sections": [
+    "intro",
+    "verse",
+    "chorus",
+    "verse",
+    "solo",
+    "chorus"
+  ]
+}

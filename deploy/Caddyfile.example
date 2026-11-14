@@ -1,0 +1,11 @@
+# Replace the hostname and password hash before installation. Generate the hash with
+# `caddy hash-password` on the target host; never commit the password or its final hash.
+grade.example.com {
+	encode zstd gzip
+
+	basic_auth {
+		grade {$GRADE_BASIC_AUTH_HASH}
+	}
+
+	reverse_proxy 127.0.0.1:8000
+}

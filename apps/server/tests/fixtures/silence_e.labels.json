@@ -1,0 +1,14 @@
+{
+  "name": "silence_e",
+  "boundaries": [
+    16.091,
+    29.182
+  ],
+  "cropStart": 3.0,
+  "cropEnd": 42.273,
+  "sections": [
+    "verse",
+    "chorus",
+    "bridge"
+  ]
+}

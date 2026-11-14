@@ -1,0 +1,25 @@
+{
+  "name": "grade",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "ci": "bash scripts/ci.sh"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.3.0",
+    "prettier-plugin-svelte": "^3.2.0",
+    "svelte": "^5.0.0",
+    "svelte-eslint-parser": "^1.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0",
+    "eslint-plugin-svelte": "^3.0.0",
+    "vitest": "^2.0.0"
+  }
+}
