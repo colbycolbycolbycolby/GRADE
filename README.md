@@ -88,6 +88,34 @@ succeeds or is skipped, `1` when any source fails, and `2` for an unreadable or 
 Rerunning the same command safely resumes the batch because completed tracks are skipped from the
 SQLite and audio cache. The command never deletes or modifies a completed song.
 
+### Prepare URLs from an artist/title catalog
+
+Create a UTF-8 catalog with one `Artist - Song Title` entry per line. Blank lines and `#` comments
+are ignored. Search for five metadata-only candidates per song (this does not download audio):
+
+```sh
+cd apps/server
+uv run python -m api.source_prep search --data-dir /absolute/path/to/grade-data \
+  /absolute/path/to/catalog.txt /absolute/path/to/review.tsv
+```
+
+The tab-separated review file includes each candidate's title, channel, duration, URL, and caution
+flags for likely live, cover, remix, over-15-minute, or unknown-duration results. Exact normalized
+title matches already in the local SQLite library are marked `already_in_library` and are not
+searched. No candidate is selected automatically.
+
+Open `review.tsv` in a spreadsheet or text editor. After checking source authorization and the
+actual upload, set `approved` to `yes` on exactly one `candidate` row for each song you want. Leave
+all other rows blank. Export the reviewed URL manifest:
+
+```sh
+uv run python -m api.source_prep approve \
+  /absolute/path/to/review.tsv /absolute/path/to/sources.txt
+```
+
+The approval step rejects malformed URLs and multiple approvals for one catalog entry. It only
+writes URLs; downloading begins only when `api.batch` is run on the resulting `sources.txt`.
+
 ## Check the code
 
 Run `bash scripts/ci.sh`. It installs the packages, then runs lint, type checks and all tests.

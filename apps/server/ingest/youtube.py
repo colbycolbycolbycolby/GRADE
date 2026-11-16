@@ -78,8 +78,12 @@ class YtDlpClient(Protocol):
     def download(self, url: str, out_dir: Path) -> Path: ...
 
 
+class YtDlpSearchClient(Protocol):
+    def search(self, query: str, limit: int) -> list[dict[str, Any]]: ...
+
+
 class RealYtDlp:
-    """The only code that imports yt-dlp. It makes one attempt and never retries."""
+    """The only code that imports yt-dlp. It never downloads during metadata lookup/search."""
 
     def _options(self) -> dict[str, Any]:
         return {"quiet": True, "no_warnings": True, "noplaylist": True, "retries": 0}
@@ -93,6 +97,18 @@ class RealYtDlp:
         except yt_dlp.utils.DownloadError as exc:
             raise map_ytdlp_error(str(exc)) from exc
         return dict(data or {})
+
+    def search(self, query: str, limit: int) -> list[dict[str, Any]]:
+        import yt_dlp
+
+        options = {**self._options(), "extract_flat": True, "skip_download": True}
+        try:
+            with yt_dlp.YoutubeDL(options) as ydl:
+                data = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+        except yt_dlp.utils.DownloadError as exc:
+            raise map_ytdlp_error(str(exc)) from exc
+        entries = (data or {}).get("entries") or []
+        return [dict(entry) for entry in entries if entry]
 
     def download(self, url: str, out_dir: Path) -> Path:
         import yt_dlp
