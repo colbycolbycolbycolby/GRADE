@@ -67,3 +67,9 @@
 - Phase 2.6A: `GRADE_MAX_ACTIVE_JOBS` is the single analysis-concurrency setting; it controls both worker count and the queued/running cap, defaults to 2, accepts 1 through 32, and invalid values stop startup rather than silently weakening deployment guardrails.
 - Batch ingestion is a sequential CLI over `IngestService`; the existing complete-cache predicate is its restart checkpoint, so it preserves track IDs, analyzer versions, storage layout, and partial-failure recovery without a second pipeline.
 - Source preparation uses yt-dlp's metadata-only `ytsearch`, writes an unapproved TSV with caution flags, and requires a separate validated approval/export step; source discovery can never start a download or silently choose a result.
+
+# AI playlist planner
+
+- The model extracts constraints only; deterministic server tools own selection and validation, preventing fabricated track IDs.
+- Artist matching uses the stored title because the current track schema has no separate artist field.
+- Playlist proposals are returned as song-based API data and do not alter the legacy block editor.
