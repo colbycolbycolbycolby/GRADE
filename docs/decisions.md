@@ -65,3 +65,9 @@
 - M8 `audioBlobs` is still unused. Reason: a cache needs a size budget and eviction (section 11), and M8 acceptance in section 9 does not ask for it.
 - After M8: the server serves `apps/web/dist` at `/` when `index.html` exists (`GRADE_WEB_DIR` changes the folder). The mount is last, so `/api` routes win. `Settings.web_dir` is `None` by default, and only `from_env` sets it, so tests do not depend on a local build.
 - Phase 2.6A: `GRADE_MAX_ACTIVE_JOBS` is the single analysis-concurrency setting; it controls both worker count and the queued/running cap, defaults to 2, accepts 1 through 32, and invalid values stop startup rather than silently weakening deployment guardrails.
+
+# AI playlist planner
+
+- The model extracts constraints only; deterministic server tools own selection and validation, preventing fabricated track IDs.
+- Artist matching uses the stored title because the current track schema has no separate artist field.
+- Playlist proposals are returned as song-based API data and do not alter the legacy block editor.

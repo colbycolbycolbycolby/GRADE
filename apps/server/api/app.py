@@ -30,6 +30,14 @@ from ingest import (
     YtDlpIngest,
 )
 from ingest.files import hash_file
+from planner import (
+    CatalogRepository,
+    OpenAIRequestInterpreter,
+    PlaylistAgent,
+    PlaylistProposal,
+    RuleBasedRequestInterpreter,
+)
+from planner.interpreter import RequestInterpreter
 
 from .jobs import JobQueue, TooManyJobs
 from .service import IngestService
@@ -55,6 +63,8 @@ class Settings:
     allowed_origins: tuple[str, ...] = field(default_factory=tuple)
     # The built web app. The server serves it at `/` when the folder exists. `from_env` sets it.
     web_dir: Path | None = None
+    openai_api_key: str | None = field(default=None, repr=False)
+    openai_model: str = "gpt-5-mini"
 
     @staticmethod
     def from_env() -> Settings:
@@ -65,6 +75,8 @@ class Settings:
             max_active_jobs=max_active_jobs,
             allowed_origins=tuple(o.strip() for o in origins.split(",") if o.strip()),
             web_dir=Path(os.environ.get("GRADE_WEB_DIR", DEFAULT_WEB_DIR)),
+            openai_api_key=os.environ.get("OPENAI_API_KEY"),
+            openai_model=os.environ.get("GRADE_OPENAI_MODEL", "gpt-5-mini"),
         )
 
 
@@ -106,11 +118,17 @@ class YoutubeBody(BaseModel):
     url: str
 
 
+class PlaylistPlanBody(BaseModel):
+    request: str
+    previous: PlaylistProposal | None = None
+
+
 def create_app(
     settings: Settings | None = None,
     ingest: AudioIngest | None = None,
     analyzer: Analyzer | None = None,
     transcoder: Transcoder | None = None,
+    playlist_interpreter: RequestInterpreter | None = None,
 ) -> FastAPI:
     cfg = settings or Settings.from_env()
     store = Store(cfg.data_dir)
@@ -126,6 +144,12 @@ def create_app(
     )
     upload_dir = cfg.data_dir / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
+    interpreter = playlist_interpreter or (
+        OpenAIRequestInterpreter(cfg.openai_api_key, cfg.openai_model)
+        if cfg.openai_api_key
+        else RuleBasedRequestInterpreter()
+    )
+    playlist_agent = PlaylistAgent(CatalogRepository(cfg.data_dir), interpreter)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> Any:
@@ -227,6 +251,12 @@ def create_app(
         if stored is None:
             raise ApiError("not_found", "There is no audio for this track.")
         return _audio_response(stored.play_path, request.headers.get("range"))
+
+    @app.post("/api/playlists/plan", dependencies=guard, response_model=PlaylistProposal)
+    def plan_playlist(body: PlaylistPlanBody) -> PlaylistProposal:
+        if not body.request.strip():
+            raise ApiError("bad_request", "The playlist request cannot be empty.")
+        return playlist_agent.plan(body.request, body.previous)
 
     # Last, so that no web file can shadow an `/api` route.
     if cfg.web_dir is not None and (cfg.web_dir / "index.html").is_file():

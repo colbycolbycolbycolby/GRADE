@@ -10,6 +10,7 @@ dependencies = [
   "librosa>=0.10",
   "numpy",
   "soundfile",
+  "openai>=2.0",
 ]
 
 [dependency-groups]
