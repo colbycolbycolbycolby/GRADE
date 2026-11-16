@@ -67,6 +67,27 @@ request for the analysis already in progress still returns that job.
 YouTube changes often, so an old yt-dlp fails with the error code `blocked` or `download_failed`.
 Run `make update-ytdlp` in `apps/server`. Then restart the server.
 
+## Batch ingest songs
+
+Put one supported YouTube URL on each line of a UTF-8 text file. Blank lines and lines whose first
+non-space character is `#` are ignored. The same single-video URL forms accepted by the app are
+accepted here; playlists and non-YouTube hosts are rejected.
+
+Run the batch from `apps/server`, pointing it at the same data directory used by the server:
+
+```sh
+cd apps/server
+uv run python -m api.batch --data-dir /absolute/path/to/grade-data /absolute/path/to/sources.txt
+```
+
+Sources run one at a time. Each prints `START`, changing `PROGRESS`, then `OK` or `ERROR`. A track
+whose current analyzer version, metadata, `play.m4a`, and `analysis.wav` are already stored prints
+`SKIP` without contacting YouTube. The command continues after a source fails and ends with counts
+for total, succeeded, skipped, and errors followed by each error. It exits `0` when every source
+succeeds or is skipped, `1` when any source fails, and `2` for an unreadable or empty input file.
+Rerunning the same command safely resumes the batch because completed tracks are skipped from the
+SQLite and audio cache. The command never deletes or modifies a completed song.
+
 ## Check the code
 
 Run `bash scripts/ci.sh`. It installs the packages, then runs lint, type checks and all tests.
