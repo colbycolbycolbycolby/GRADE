@@ -13,6 +13,8 @@ class RevisionRequest(BaseModel):
     position: int = Field(ge=1)
     ride_type: RideType | None = None
     harder: bool = False
+    target_title: str | None = None
+    replacement_title: str | None = None
 
 
 class PlaylistRequest(BaseModel):

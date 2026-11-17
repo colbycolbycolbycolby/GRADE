@@ -60,3 +60,17 @@ class CatalogRepository:
 
     def ids(self) -> set[str]:
         return {song.track_id for song in self.search()}
+
+    def find_title(self, title: str) -> CatalogSong | None:
+        needle = self._normalized_title(title)
+        matches = [
+            song
+            for song in self.search()
+            if self._normalized_title(song.title) == needle
+            or self._normalized_title(song.title).endswith(f" - {needle}")
+        ]
+        return matches[0] if len(matches) == 1 else None
+
+    @staticmethod
+    def _normalized_title(title: str) -> str:
+        return " ".join(title.casefold().replace("—", "-").split())
