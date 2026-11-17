@@ -8,7 +8,7 @@
   import { OffsetBackend, type PlaybackBackend } from '../playback';
   import BlockList from './BlockList.svelte';
   import ClassStrip from './ClassStrip.svelte';
-  import { formatTime } from './geometry';
+  import { clampBoundary, formatTime } from './geometry';
   import IntervalForm from './IntervalForm.svelte';
   import { canRedoState, canUndoState, usedLabels } from './model';
   import { EditorStore } from './store.svelte';
@@ -46,6 +46,7 @@
   let playing = $state(false);
   let audioReady = $state(false);
   let audioError = $state('');
+  let titleMenuOpen = $state(false);
   let off: (() => void)[] = [];
 
   onMount(() => {
@@ -61,11 +62,13 @@
       .load({ id: track.id, url: services.api.audioUrl(track.id) })
       .then(() => (audioReady = true))
       .catch(() => (audioError = 'The audio could not load. You can still edit.'));
+    window.addEventListener('keydown', onEditorKeydown);
   });
 
   onDestroy(() => {
     for (const fn of off) fn();
     backend?.dispose();
+    window.removeEventListener('keydown', onEditorKeydown);
     void store.flush();
   });
 
@@ -90,6 +93,50 @@
     store.dispatch({ type: 'select-segment', id });
   }
 
+  function isTextEntry(target: EventTarget | null): boolean {
+    return (
+      target instanceof Element &&
+      !!target.closest('input, textarea, select, [contenteditable="true"]')
+    );
+  }
+
+  function onEditorKeydown(event: KeyboardEvent) {
+    if (isTextEntry(event.target)) return;
+    const commandKey = event.metaKey || event.ctrlKey;
+    if (commandKey && event.key.toLowerCase() === 'z') {
+      event.preventDefault();
+      if (event.shiftKey) {
+        if (canRedoState(ed)) store.dispatch({ type: 'redo' });
+      } else if (canUndoState(ed)) store.dispatch({ type: 'undo' });
+      return;
+    }
+    if (event.ctrlKey && event.key.toLowerCase() === 'y') {
+      event.preventDefault();
+      if (canRedoState(ed)) store.dispatch({ type: 'redo' });
+      return;
+    }
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const direction = event.key === 'ArrowLeft' ? -1 : 1;
+    const step = event.shiftKey ? 5 : 0.5;
+    event.preventDefault();
+    if (event.altKey && selectedIndex >= 0 && program.segments.length > 1) {
+      const boundaryIndex = Math.min(selectedIndex, program.segments.length - 2);
+      const boundary = program.segments[boundaryIndex]!;
+      store.dispatch({
+        type: 'move-boundary',
+        index: boundaryIndex,
+        to: clampBoundary(
+          program.segments,
+          boundaryIndex,
+          boundary.end + direction * step,
+          MIN_SEGMENT_SEC,
+        ),
+      });
+      return;
+    }
+    seek(Math.min(duration, Math.max(0, ed.playhead + direction * step)));
+  }
+
   /** Saves first, so the runner loads the program with the latest edit. */
   async function startClass(event: MouseEvent) {
     event.preventDefault();
@@ -102,10 +149,13 @@
     services.download(file.filename, file.text);
   }
 
-  const canSplitSelected = $derived(
-    !!selected &&
-      ed.playhead - selected.start >= MIN_SEGMENT_SEC &&
-      selected.end - ed.playhead >= MIN_SEGMENT_SEC,
+  const splitTarget = $derived(
+    program.segments.find((segment) => ed.playhead >= segment.start && ed.playhead < segment.end),
+  );
+  const canSplitAtPlayhead = $derived(
+    !!splitTarget &&
+      ed.playhead - splitTarget.start >= MIN_SEGMENT_SEC &&
+      splitTarget.end - ed.playhead >= MIN_SEGMENT_SEC,
   );
 </script>
 
@@ -181,7 +231,24 @@
       aria-label="Scrub"
       oninput={(e) => seek(Number((e.currentTarget as HTMLInputElement).value))}
     />
+    <button
+      type="button"
+      class="split-marker"
+      disabled={!canSplitAtPlayhead}
+      aria-label="Split section at playhead"
+      title="Split the section under the playhead (at least 2 seconds from either edge)"
+      onclick={() =>
+        splitTarget &&
+        store.dispatch({ type: 'split', segmentId: splitTarget.id, at: ed.playhead })}
+    >
+      <span aria-hidden="true">&#128205;</span> Split here
+    </button>
   </div>
+
+  <p class="shortcut-help muted">
+    Keyboard: ←/→ move 0.5s · Shift moves 5s · Option/Alt + ←/→ adjusts the selected boundary ·
+    ⌘/Ctrl + Z undo
+  </p>
 
   <Waveform
     {program}
@@ -210,32 +277,46 @@
         {/each}
       </div>
       <div class="row">
-        <label>
-          <span class="muted">Name</span>
-          <input
-            type="text"
-            list="section-labels-{uid}"
-            value={selected.label ?? ''}
-            placeholder={segmentTitle(program, selected)}
-            aria-label="Section name"
-            onchange={(e) =>
-              store.dispatch({
-                type: 'set-label',
-                segmentId: selected.id,
-                label: (e.currentTarget as HTMLInputElement).value,
-              })}
-          />
-        </label>
-        <datalist id="section-labels-{uid}">
-          {#each usedLabels(program) as label (label)}<option value={label}></option>{/each}
-        </datalist>
-        <button
-          type="button"
-          disabled={!canSplitSelected}
-          onclick={() => store.dispatch({ type: 'split', segmentId: selected.id, at: ed.playhead })}
-        >
-          Split at playhead
-        </button>
+        <div class="name-field">
+          <label>
+            <span class="muted">Name</span>
+            <input
+              type="text"
+              value={selected.label ?? ''}
+              placeholder={segmentTitle(program, selected)}
+              aria-label="Section name"
+              onchange={(e) =>
+                store.dispatch({
+                  type: 'set-label',
+                  segmentId: selected.id,
+                  label: (e.currentTarget as HTMLInputElement).value,
+                })}
+            />
+          </label>
+          {#if usedLabels(program).length > 0}
+            <button
+              type="button"
+              class="reuse-title"
+              aria-expanded={titleMenuOpen}
+              aria-controls="reuse-title-{uid}"
+              onclick={() => (titleMenuOpen = !titleMenuOpen)}>Reuse a title</button
+            >
+            {#if titleMenuOpen}
+              <div class="title-menu" id="reuse-title-{uid}" role="menu">
+                {#each usedLabels(program) as label (label)}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onclick={() => {
+                      store.dispatch({ type: 'set-label', segmentId: selected.id, label });
+                      titleMenuOpen = false;
+                    }}>{label}</button
+                  >
+                {/each}
+              </div>
+            {/if}
+          {/if}
+        </div>
         <button
           type="button"
           disabled={selectedIndex <= 0}
@@ -292,6 +373,45 @@
     padding: 12px;
     border: 1px solid var(--border);
     background: linear-gradient(90deg, rgb(36 3 252 / 0.14), transparent 42%);
+  }
+  .split-marker {
+    white-space: nowrap;
+  }
+  .shortcut-help {
+    margin: -10px 0 12px;
+    font-size: 0.78rem;
+  }
+  .name-field {
+    position: relative;
+    display: flex;
+    align-items: end;
+    gap: 6px;
+  }
+  .name-field label {
+    display: flex;
+    flex-direction: column;
+  }
+  .reuse-title {
+    padding-inline: 9px;
+  }
+  .title-menu {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    max-height: 220px;
+    overflow: auto;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    box-shadow: 0 10px 28px rgb(0 0 0 / 0.22);
+  }
+  .title-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
   }
   button.current {
     outline: 3px solid var(--text);

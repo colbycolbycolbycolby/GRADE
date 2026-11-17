@@ -62,6 +62,17 @@ describe('Editor', () => {
     expect(root.querySelector('[aria-label="Selected section"] h2')?.textContent).toBe('Section 3');
   });
 
+  test('clicking a section directly on the waveform selects it and seeks there', async () => {
+    const root = await open();
+    const hit = byLabel<HTMLElement>(root, 'Select Section 3 on waveform');
+    hit.parentElement!.getBoundingClientRect = () =>
+      ({ left: 0, width: 600, right: 600, top: 0, bottom: 120, height: 120 }) as DOMRect;
+    hit.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 350 }));
+    await settle();
+    expect(root.querySelector('[aria-label="Selected section"] h2')?.textContent).toBe('Section 3');
+    expect(hit.getAttribute('aria-pressed')).toBe('true');
+  });
+
   test('the tier picker changes the tier and saves it', async () => {
     const root = await open();
     const picker = byLabel(root, 'Intensity');
@@ -83,16 +94,17 @@ describe('Editor', () => {
     expect(segmentTitle(p!, p!.segments[1]!)).toBe('Section 2');
   });
 
-  test('split needs the playhead inside the section, then adds a section', async () => {
+  test('split uses the section under the playhead without selecting it first', async () => {
     const root = await open();
-    const split = button(root, 'Split at playhead');
+    const split = byLabel<HTMLButtonElement>(root, 'Split section at playhead');
     expect(split.disabled).toBe(true); // the playhead is at 0
-    await setValue(byLabel<HTMLInputElement>(root, 'Scrub'), '10', 'input');
+    await setValue(byLabel<HTMLInputElement>(root, 'Scrub'), '70', 'input');
     expect(split.disabled).toBe(false);
     await click(split);
     expect(root.querySelectorAll('.labels .label')).toHaveLength(5);
     const p = await until(saved, (x) => x?.segments.length === 5);
-    expect(p!.segments[1]!.start).toBe(10);
+    expect(p!.segments[3]!.start).toBe(70);
+    expect(root.querySelector('[aria-label="Selected section"] h2')?.textContent).toBe('Section 1');
   });
 
   test('merge and delete remove sections, and the user is told about the class order', async () => {
@@ -117,6 +129,46 @@ describe('Editor', () => {
     expect(button(byLabel(root, 'Intensity'), 'Hard').getAttribute('aria-pressed')).toBe('false');
     await click(button(root, 'Redo'));
     expect(button(byLabel(root, 'Intensity'), 'Hard').getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('desktop shortcuts move the playhead, adjust a boundary, and undo/redo edits', async () => {
+    const root = await open();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await settle();
+    expect(byLabel<HTMLInputElement>(root, 'Scrub').value).toBe('0.5');
+
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true }),
+    );
+    await until(saved, (x) => x?.segments[0]?.end === 30.5);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true }));
+    await until(saved, (x) => x?.segments[0]?.end === 30);
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'z', metaKey: true, shiftKey: true, bubbles: true }),
+    );
+    await until(saved, (x) => x?.segments[0]?.end === 30.5);
+  });
+
+  test('editor shortcuts do not interfere with text entry', async () => {
+    const root = await open();
+    const name = byLabel<HTMLInputElement>(root, 'Section name');
+    name.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    name.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true }));
+    await settle();
+    expect(byLabel<HTMLInputElement>(root, 'Scrub').value).toBe('0');
+    expect(button(root, 'Undo').disabled).toBe(true);
+  });
+
+  test('the reusable-title menu stays anchored to the name field', async () => {
+    const program = makeProgram();
+    program.segments[1] = { ...program.segments[1]!, label: 'Climb' };
+    const root = await open(program);
+    await click(button(root, 'Reuse a title'));
+    const menu = root.querySelector<HTMLElement>('.title-menu')!;
+    expect(menu.parentElement?.classList.contains('name-field')).toBe(true);
+    await click(button(menu, 'Climb'));
+    const p = await until(saved, (x) => x?.segments[0]?.label === 'Climb');
+    expect(p!.segments[0]!.label).toBe('Climb');
   });
 
   test('a boundary moves with the keyboard, and not below the minimum section length', async () => {
