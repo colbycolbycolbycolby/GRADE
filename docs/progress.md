@@ -1,6 +1,6 @@
 # Progress
 
-Last update: 2026-10-22 (M8 done, device checks open). Source of truth for the plan: `architecture.md`.
+Last update: 2026-11-16 (integration sprint done, device checks open). Source of truth for the plan: `architecture.md`.
 
 ## Done (each one is a commit, and `bash scripts/ci.sh` passes)
 - M1 Foundation (`74fc42a`): monorepo, lint, format, test runners, CI script.
@@ -23,6 +23,15 @@ All milestones are built. Open work, in order of value:
 2. Test the README on a fresh clone (not done).
 3. Use `audioBlobs` with a size budget and eviction (section 11).
 4. Make PNG icons.
+
+## Integration sprint
+
+- Merged sequential batch ingestion/source review and the catalog-grounded AI playlist planner.
+- Added `#/planner`: natural-language generation and revision, visible workout roles/reasons and
+  shortfalls, manual reorder/remove/replace, and save to the existing ClassPlan/Program/playback flow.
+- Saving preserves canonical track IDs and analysis versions, reuses matching instructor Programs,
+  and creates neutral analysis-derived drafts only when no matching Program exists.
+- Verified with deterministic analyzed catalog fixtures; production/device playback checks remain open.
 
 ## Run the app
 Server: `cd apps/server && uv run uvicorn api.app:create_app --factory`. It serves `apps/web/dist` at `/` after `pnpm --filter @grade/web build`. Set `GRADE_DATA_DIR` and `GRADE_ALLOWED_ORIGINS` if needed. `make update-ytdlp` upgrades yt-dlp.

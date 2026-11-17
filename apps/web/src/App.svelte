@@ -4,6 +4,7 @@
   import Import from './app/Import.svelte';
   import Library from './app/Library.svelte';
   import PlanPage from './app/PlanPage.svelte';
+  import PlaylistPlanner from './app/PlaylistPlanner.svelte';
   import ProgramPage from './app/ProgramPage.svelte';
   import RunPage from './app/RunPage.svelte';
   import Settings from './app/Settings.svelte';
@@ -48,6 +49,8 @@
     <Import {services} onstarted={(jobId, trackId) => go(hrefs.analyzing(jobId, trackId))} />
   {:else if route.name === 'settings'}
     <Settings {services} />
+  {:else if route.name === 'planner'}
+    <PlaylistPlanner {services} onsaved={(id) => go(hrefs.plan(id))} />
   {:else if route.name === 'analyzing'}
     <Analyzing
       {services}

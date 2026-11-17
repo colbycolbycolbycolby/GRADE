@@ -90,6 +90,40 @@ def test_artist_filter_and_requested_roles(catalog_dir: Path) -> None:
     assert all("Rihanna" in entry.title for entry in result.entries)
 
 
+def test_product_example_parses_hyphenated_count_artist_and_class() -> None:
+    request = RuleBasedRequestInterpreter().interpret(
+        "Make me a 10-song Rihanna class with five hills, four sprints, and one surprise."
+    )
+
+    assert request.song_count == 10
+    assert request.artist == "Rihanna"
+    assert request.ride_types == {"hill": 5, "sprint": 4, "surprise": 1}
+
+
+def test_planner_sees_song_inserted_after_agent_creation(catalog_dir: Path) -> None:
+    planner = agent(catalog_dir)
+    assert planner.plan("Make me a New Artist class.").entries == []
+    body = {
+        "trackId": "yt:GGGGGGGGGGG",
+        "bpm": 110,
+        "energy": [{"t": 0, "e": 0.5}, {"t": 200, "e": 0.7}],
+        "boundaries": [100],
+        "structure": [{"kind": "section"}, {"kind": "section"}],
+    }
+    with sqlite3.connect(catalog_dir / "grade.sqlite3") as db:
+        db.execute(
+            "INSERT INTO tracks VALUES (?, 'youtube', ?, ?)",
+            ("yt:GGGGGGGGGGG", "New Artist - Fresh Song", 200),
+        )
+        db.execute(
+            "INSERT INTO analyses VALUES (?, 1, ?)",
+            ("yt:GGGGGGGGGGG", json.dumps(body)),
+        )
+
+    result = planner.plan("Make me a New Artist class.")
+    assert [entry.track_id for entry in result.entries] == ["yt:GGGGGGGGGGG"]
+
+
 def test_interpreter_understands_climb_synonym_and_articles() -> None:
     request = RuleBasedRequestInterpreter().interpret(
         "I need a high intensity ride with two climbs, a sprint, and a recovery."

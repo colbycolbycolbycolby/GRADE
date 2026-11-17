@@ -73,3 +73,8 @@
 - The model extracts constraints only; deterministic server tools own selection and validation, preventing fabricated track IDs.
 - Artist matching uses the stored title because the current track schema has no separate artist field.
 - Playlist proposals are returned as song-based API data and do not alter the legacy block editor.
+- Integration sprint: AI roles and explanations remain proposal-level metadata. Saving reuses an
+  existing Program with the same canonical track ID and analysis version, or creates a neutral
+  `programFromAnalysis` draft; it never overwrites instructor instructions or canonical analysis.
+- Integration sprint: the planner repository opens SQLite read-only for every search, so a
+  long-running server sees newly completed batch-ingestion rows without a restart or second catalog.

@@ -55,7 +55,9 @@ class RuleBasedRequestInterpreter:
         )
         request.revision = None
 
-        count = re.search(r"\b(\d+|" + "|".join(NUMBER_WORDS) + r")\s+songs?\b", lower)
+        count = re.search(
+            r"\b(\d+|" + "|".join(NUMBER_WORDS) + r")(?:-|\s+)songs?\b", lower
+        )
         if count:
             request.song_count = self._number(count.group(1))
         duration = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:minute|min)\b", lower)
@@ -63,7 +65,9 @@ class RuleBasedRequestInterpreter:
             request.duration_minutes = float(duration.group(1))
 
         artist = re.search(
-            r"(?:make|build|create)(?:\s+me)?\s+(.+?)\s+(?:cycling\s+)?playlist\b",
+            r"(?:make|build|create)(?:\s+me)?(?:\s+a|\s+an)?"
+            r"(?:\s+(?:\d+|" + "|".join(NUMBER_WORDS) + r")-?songs?)?"
+            r"\s+(.+?)\s+(?:cycling\s+)?(?:playlist|class|ride)\b",
             text,
             re.IGNORECASE,
         )

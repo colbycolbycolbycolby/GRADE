@@ -84,6 +84,44 @@ export function makeFakeFetch() {
       jobs.set(jobId, { polls: 0, trackId: TRACK_ID, fail: state.failJob ?? undefined });
       return json({ jobId, trackId: TRACK_ID });
     }
+    if (method === 'POST' && input === '/api/playlists/plan') {
+      return json({
+        status: 'complete',
+        understood_request: {
+          artist: null,
+          song_count: 1,
+          duration_minutes: null,
+          intensity: null,
+          ride_types: { hill: 1 },
+          revision: null,
+        },
+        summary: 'Planned 1 analyzed catalog song(s) for the ride.',
+        entries: [
+          {
+            position: 1,
+            track_id: TRACK_ID,
+            title: track.title,
+            purpose: 'hill',
+            bpm: 120,
+            energy: 0.6,
+            duration: track.duration,
+            explanation: 'Its sustained energy suits loaded resistance.',
+          },
+        ],
+        shortfalls: [],
+        validation: {
+          valid_track_ids: true,
+          unique_tracks: true,
+          requested_song_count: 1,
+          actual_song_count: 1,
+          requested_duration_minutes: null,
+          actual_duration_minutes: 2.08,
+          requested_ride_types: { hill: 1 },
+          actual_ride_types: { hill: 1 },
+          satisfied: true,
+        },
+      });
+    }
     const job = /^\/api\/jobs\/([^/]+)$/.exec(input);
     if (job) {
       const j = jobs.get(decodeURIComponent(job[1]!));

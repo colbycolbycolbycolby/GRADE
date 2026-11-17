@@ -2,6 +2,7 @@ export type Route =
   | { name: 'library' }
   | { name: 'import' }
   | { name: 'settings' }
+  | { name: 'planner' }
   | { name: 'analyzing'; jobId: string; trackId: string }
   | { name: 'program'; id: string }
   | { name: 'plan'; id: string }
@@ -12,6 +13,7 @@ export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   if (parts[0] === 'import') return { name: 'import' };
   if (parts[0] === 'settings') return { name: 'settings' };
+  if (parts[0] === 'planner') return { name: 'planner' };
   if (parts[0] === 'analyzing' && parts[1] && parts[2]) {
     return { name: 'analyzing', jobId: parts[1], trackId: parts[2] };
   }
@@ -27,6 +29,7 @@ export const hrefs = {
   library: () => '#/',
   import: () => '#/import',
   settings: () => '#/settings',
+  planner: () => '#/planner',
   analyzing: (jobId: string, trackId: string) =>
     `#/analyzing/${encodeURIComponent(jobId)}/${encodeURIComponent(trackId)}`,
   program: (id: string) => `#/program/${encodeURIComponent(id)}`,

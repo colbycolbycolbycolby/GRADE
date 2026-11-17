@@ -314,6 +314,6 @@ describe('class plan page', () => {
       (t) => /Friday/.test(t),
     );
     const links = [...root.querySelectorAll('a.button')].map((a) => a.getAttribute('href'));
-    expect(links).toEqual(['#/settings', '#/run/program/p1', '#/run/plan/plan1']);
+    expect(links).toEqual(['#/planner', '#/settings', '#/run/program/p1', '#/run/plan/plan1']);
   });
 });

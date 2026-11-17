@@ -88,6 +88,7 @@
     <div class="energy-mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <div class="row hero-actions">
       <a href={hrefs.import()}><button type="button" class="primary">New program</button></a>
+      <a class="button" href={hrefs.planner()}>Plan with AI</a>
       <label class="file">
         <span class="button">Import program file</span>
         <input type="file" accept=".json,application/json" onchange={importFile} />

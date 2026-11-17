@@ -3,10 +3,12 @@ import {
   ApiErrorSchema,
   IngestResponseSchema,
   JobStatusSchema,
+  PlaylistProposalSchema,
   TrackSchema,
   type Analysis,
   type IngestResponse,
   type JobStatus,
+  type PlaylistProposal,
   type Track,
 } from '@grade/schema';
 
@@ -84,6 +86,14 @@ export class ApiClient {
 
   getAnalysis(trackId: string): Promise<Analysis> {
     return this.request(`/api/tracks/${encodeURIComponent(trackId)}/analysis`, AnalysisSchema);
+  }
+
+  planPlaylist(request: string, previous?: PlaylistProposal): Promise<PlaylistProposal> {
+    return this.request('/api/playlists/plan', PlaylistProposalSchema, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request, previous: previous ?? null }),
+    });
   }
 
   /**

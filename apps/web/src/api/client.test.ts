@@ -35,6 +35,18 @@ describe('ApiClient', () => {
     expect((await api.getAnalysis(track.id)).cropStart).toBe(2);
   });
 
+  test('plans a catalog-grounded playlist and sends revisions with prior context', async () => {
+    const { fake, api } = client();
+    const proposal = await api.planPlaylist('Make one hill song.');
+    expect(proposal.entries[0]).toMatchObject({ track_id: track.id, purpose: 'hill' });
+    await api.planPlaylist('Replace the first entry.', proposal);
+    expect(fake.calls[1]).toMatchObject({
+      path: '/api/playlists/plan',
+      method: 'POST',
+      body: { request: 'Replace the first entry.', previous: proposal },
+    });
+  });
+
   test('a server error keeps its code and message', async () => {
     const { fake, api } = client();
     fake.state.failIngest = { status: 400, code: 'unsupported_host', message: 'Only YouTube.' };

@@ -56,6 +56,8 @@ The server reads these environment variables.
 | `GRADE_ALLOWED_ORIGINS` | Web addresses that may call the API, separated by commas (CORS).  | none    |
 | `GRADE_WEB_DIR`         | The folder of the built web app that the server serves at `/`.    | `apps/web/dist` |
 | `GRADE_MAX_ACTIVE_JOBS` | Maximum analysis jobs queued or running; also sets worker count.  | `2`     |
+| `OPENAI_API_KEY`        | Optional; enables model-assisted request parsing for AI playlists. | none    |
+| `GRADE_OPENAI_MODEL`    | Model used only to extract playlist constraints.                  | `gpt-5-mini` |
 
 Set `GRADE_ALLOWED_ORIGINS` when the web app and the server use different addresses.
 `GRADE_MAX_ACTIVE_JOBS` must be an integer from 1 to 32. The server refuses to start when it is invalid.
@@ -125,6 +127,9 @@ The tests do not use the network. To test against real YouTube, run `uv run pyte
 ## Use the app
 
 - **Library**: lists the programs and class plans. Open **Settings** for the theme and the glitch effect.
+- **Plan with AI**: describe a class, review real analyzed catalog songs and reasons, revise or
+  manually reorder/remove/replace them, then save the result as a normal class plan. Without an
+  OpenAI key, the deterministic parser still supports common counts, artists, roles and revisions.
 - **New program**: paste a YouTube link (one video, 15 minutes or less) or add an audio file.
 - **Editor**: tap a section to select it, pick its tier, drag the dividers, and order the blocks.
   Use **Start class** to open the runner.
@@ -197,6 +202,8 @@ the server. The page must be secure (`https://` or `localhost`).
 - **Data:** job state is in memory, so a server restart forgets job numbers. Stored songs stay.
 - **Repo:** the git repository has no remote.
 - **Test songs** are synthetic. Real tracks with labels would test the analyzer better.
+- **AI request language:** model-assisted parsing is optional. The local parser intentionally
+  understands a smaller set of phrases, and artist matching currently uses the stored song title.
 
 ## More documents
 

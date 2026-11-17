@@ -80,6 +80,59 @@ export const ClassPlanSchema = z.object({
 });
 export type ClassPlan = z.infer<typeof ClassPlanSchema>;
 
+export const RideTypeSchema = z.enum(['warmup', 'hill', 'sprint', 'recovery', 'surprise']);
+export type RideType = z.infer<typeof RideTypeSchema>;
+
+export const PlaylistRequestSchema = z.object({
+  artist: z.string().nullable().optional(),
+  song_count: z.number().int().positive().nullable().optional(),
+  duration_minutes: z.number().positive().nullable().optional(),
+  intensity: z.enum(['low', 'moderate', 'high']).nullable().optional(),
+  ride_types: z.record(RideTypeSchema, z.number().int().nonnegative()),
+  revision: z
+    .object({
+      action: z.literal('replace'),
+      position: z.number().int().positive(),
+      ride_type: RideTypeSchema.nullable().optional(),
+      harder: z.boolean(),
+    })
+    .nullable()
+    .optional(),
+});
+export type PlaylistRequest = z.infer<typeof PlaylistRequestSchema>;
+
+export const PlaylistEntrySchema = z.object({
+  position: z.number().int().positive(),
+  track_id: z.string(),
+  title: z.string(),
+  purpose: RideTypeSchema,
+  bpm: z.number().positive().nullable(),
+  energy: z.number(),
+  duration: seconds,
+  explanation: z.string(),
+});
+export type PlaylistEntry = z.infer<typeof PlaylistEntrySchema>;
+
+export const PlaylistProposalSchema = z.object({
+  status: z.enum(['complete', 'partial', 'impossible']),
+  understood_request: PlaylistRequestSchema,
+  summary: z.string(),
+  entries: z.array(PlaylistEntrySchema),
+  shortfalls: z.array(z.string()),
+  validation: z.object({
+    valid_track_ids: z.boolean(),
+    unique_tracks: z.boolean(),
+    requested_song_count: z.number().int().positive().nullable(),
+    actual_song_count: z.number().int().nonnegative(),
+    requested_duration_minutes: z.number().positive().nullable(),
+    actual_duration_minutes: z.number().nonnegative(),
+    requested_ride_types: z.record(RideTypeSchema, z.number().int().nonnegative()),
+    actual_ride_types: z.record(RideTypeSchema, z.number().int().nonnegative()),
+    satisfied: z.boolean(),
+  }),
+});
+export type PlaylistProposal = z.infer<typeof PlaylistProposalSchema>;
+
 /** File format for exported programs. */
 export const ProgramFileSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),

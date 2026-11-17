@@ -46,7 +46,7 @@ export async function click(el: HTMLElement): Promise<void> {
 }
 
 export async function setValue(
-  el: HTMLInputElement | HTMLSelectElement,
+  el: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
   value: string,
   event = 'change',
 ) {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { makeServices, type TestServices } from '../testing/fixtures';
+import { makeServices, track, type TestServices } from '../testing/fixtures';
 import {
   button,
   byLabel,
@@ -234,6 +234,36 @@ describe('App', () => {
     await until(
       () => root.querySelector('[role="alert"]')?.textContent ?? '',
       (t) => /Could not open storage/.test(t),
+    );
+  });
+
+  test('AI request uses a real analyzed song and saves a playable class plan', async () => {
+    const root = await start('#/planner');
+    await setValue(
+      root.querySelector<HTMLTextAreaElement>('textarea')!,
+      'Make me one hill song.',
+      'input',
+    );
+    await click(button(root, 'Generate playlist'));
+    await until(
+      () => root.textContent ?? '',
+      (text) => /sustained energy suits loaded resistance/.test(text),
+    );
+    await click(button(root, 'Save as class plan'));
+    await until(
+      () => location.hash,
+      (hash) => /^#\/plan\//.test(hash),
+    );
+    expect((await services.storage.listClassPlans())[0]?.programIds).toHaveLength(1);
+    expect((await services.storage.listPrograms())[0]).toMatchObject({ trackId: track.id });
+    await until(
+      () => root.textContent ?? '',
+      (text) => /Start class/.test(text),
+    );
+    await click(button(root, 'Start class'));
+    await until(
+      () => location.hash,
+      (hash) => /^#\/run\/plan\//.test(hash),
     );
   });
 });
