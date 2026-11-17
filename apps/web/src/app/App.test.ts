@@ -255,7 +255,10 @@ describe('App', () => {
       (hash) => /^#\/plan\//.test(hash),
     );
     expect((await services.storage.listClassPlans())[0]?.programIds).toHaveLength(1);
-    expect((await services.storage.listPrograms())[0]).toMatchObject({ trackId: track.id });
+    expect((await services.storage.listPrograms())[0]).toMatchObject({
+      trackId: track.id,
+      name: 'Test Song — AI draft',
+    });
     await until(
       () => root.textContent ?? '',
       (text) => /Start class/.test(text),

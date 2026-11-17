@@ -72,7 +72,7 @@
     if (reusable) return reusable;
     const program = programFromAnalysis(
       analysis,
-      { name: track.title, now: services.now() },
+      { name: `${track.title} — AI draft`, now: services.now() },
       { newId: services.newId },
     );
     await services.storage.saveProgram(program);
