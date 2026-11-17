@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Iterable
 from typing import Literal
@@ -16,6 +17,7 @@ from .models import (
 )
 
 DEFAULT_ROLE_ORDER: tuple[RideType, ...] = ("warmup", "hill", "sprint", "recovery", "surprise")
+DEFAULT_SONG_COUNT = 10
 
 
 class PlaylistAgent:
@@ -29,9 +31,33 @@ class PlaylistAgent:
         request = self._interpreter.interpret(text, previous)
         if request.revision is not None and previous is not None:
             return self._revise(request, previous)
-        return self._create(request)
+        if (
+            previous is not None
+            and request.song_count is not None
+            and re.search(r"\b(?:make|resize|change)\s+this\b", text, re.IGNORECASE)
+        ):
+            return self._resize(request, previous)
+        return self._create(request, previous)
 
-    def _create(self, request: PlaylistRequest) -> PlaylistProposal:
+    def _resize(self, request: PlaylistRequest, previous: PlaylistProposal) -> PlaylistProposal:
+        target = request.song_count
+        assert target is not None
+        entries = [entry.model_copy(deep=True) for entry in previous.entries[:target]]
+        if len(entries) < target:
+            used = {entry.track_id for entry in entries}
+            for candidate in self._create(request, previous).entries:
+                if candidate.track_id not in used:
+                    entries.append(candidate.model_copy(deep=True))
+                    used.add(candidate.track_id)
+                    if len(entries) == target:
+                        break
+        for position, entry in enumerate(entries, 1):
+            entry.position = position
+        return self._proposal(request, entries, target)
+
+    def _create(
+        self, request: PlaylistRequest, previous: PlaylistProposal | None = None
+    ) -> PlaylistProposal:
         candidates = self._catalog.search(request.artist)
         roles = self._requested_roles(request)
         duration_count: int | None = None
@@ -41,21 +67,30 @@ class PlaylistAgent:
                 1,
                 min(len(candidates), round(request.duration_minutes * 60 / average_duration)),
             )
-        target_count = request.song_count or len(roles) or duration_count or len(candidates)
+        target_count = (
+            request.song_count
+            or len(roles)
+            or duration_count
+            or min(DEFAULT_SONG_COUNT, len(candidates))
+        )
         if not roles:
             roles = self._balanced_roles(target_count)
         elif len(roles) < target_count:
             roles.extend(self._balanced_roles(target_count - len(roles), offset=len(roles)))
-        elif len(roles) > target_count:
-            target_count = len(roles)
 
         entries: list[PlaylistEntry] = []
         available = list(candidates)
-        for role in self._workout_order(roles):
+        previous_ids = {entry.track_id for entry in previous.entries} if previous else set()
+        for role in self._workout_order(roles)[:target_count]:
             if not available:
                 break
             song = max(
-                available, key=lambda item: (self._score(item, role, request), item.track_id)
+                available,
+                key=lambda item: (
+                    item.track_id not in previous_ids,
+                    self._score(item, role, request),
+                    item.track_id,
+                ),
             )
             available.remove(song)
             entries.append(self._entry(song, role, len(entries) + 1))
@@ -65,32 +100,51 @@ class PlaylistAgent:
         revision = request.revision
         assert revision is not None
         entries = [entry.model_copy(deep=True) for entry in previous.entries]
-        matching = [
-            (index, entry)
-            for index, entry in enumerate(entries)
-            if revision.ride_type is None or entry.purpose == revision.ride_type
-        ]
+        if revision.target_title is not None:
+            matching = [
+                (index, entry)
+                for index, entry in enumerate(entries)
+                if self._title_matches(entry.title, revision.target_title)
+            ]
+        else:
+            matching = [
+                (index, entry)
+                for index, entry in enumerate(entries)
+                if revision.ride_type is None or entry.purpose == revision.ride_type
+            ]
         shortfalls: list[str] = []
         if revision.position > len(matching):
-            shortfalls.append(
-                f"There is no {self._ordinal(revision.position)} "
-                f"{revision.ride_type or 'playlist'} entry to replace."
+            requested = (
+                repr(revision.target_title)
+                if revision.target_title is not None
+                else f"{self._ordinal(revision.position)} {revision.ride_type or 'playlist'} entry"
             )
+            shortfalls.append(f"There is no {requested} to replace.")
             return self._proposal(request, entries, len(entries), extra_shortfalls=shortfalls)
 
         index, old = matching[revision.position - 1]
         used = {entry.track_id for entry in entries}
-        candidates = [
-            song
-            for song in self._catalog.search(request.artist)
-            if song.track_id not in used
-            and (not revision.harder or self._hardness(song) > self._entry_hardness(old))
-        ]
+        if revision.replacement_title is not None:
+            named = self._catalog.find_title(revision.replacement_title)
+            candidates = [named] if named is not None and named.track_id not in used else []
+        else:
+            candidates = [
+                song
+                for song in self._catalog.search(request.artist)
+                if song.track_id not in used
+                and (not revision.harder or self._hardness(song) > self._entry_hardness(old))
+            ]
         if not candidates:
-            shortfalls.append(
-                f"No unused analyzed track satisfies the replacement for {old.title!r}"
-                + (" with a harder option." if revision.harder else ".")
-            )
+            if revision.replacement_title is not None:
+                shortfalls.append(
+                    f"No unique analyzed catalog track exactly matches "
+                    f"{revision.replacement_title!r} for the replacement."
+                )
+            else:
+                shortfalls.append(
+                    f"No unused analyzed track satisfies the replacement for {old.title!r}"
+                    + (" with a harder option." if revision.harder else ".")
+                )
             return self._proposal(request, entries, len(entries), extra_shortfalls=shortfalls)
         replacement = max(
             candidates,
@@ -99,6 +153,12 @@ class PlaylistAgent:
         entries[index] = self._entry(replacement, old.purpose, old.position)
         entries[index].explanation = f"Replaces {old.title}; " + entries[index].explanation
         return self._proposal(request, entries, len(entries))
+
+    @staticmethod
+    def _title_matches(catalog_title: str, requested_title: str) -> bool:
+        current = " ".join(catalog_title.casefold().replace("—", "-").split())
+        requested = " ".join(requested_title.casefold().replace("—", "-").split())
+        return current == requested or current.endswith(f" - {requested}")
 
     @staticmethod
     def _requested_roles(request: PlaylistRequest) -> list[RideType]:

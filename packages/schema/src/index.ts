@@ -95,6 +95,8 @@ export const PlaylistRequestSchema = z.object({
       position: z.number().int().positive(),
       ride_type: RideTypeSchema.nullable().optional(),
       harder: z.boolean(),
+      target_title: z.string().nullable().optional(),
+      replacement_title: z.string().nullable().optional(),
     })
     .nullable()
     .optional(),

@@ -3,12 +3,18 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from api import Settings, create_app
-from planner import CatalogRepository, PlaylistAgent, RuleBasedRequestInterpreter
+from planner import (
+    CatalogRepository,
+    OpenAIRequestInterpreter,
+    PlaylistAgent,
+    RuleBasedRequestInterpreter,
+)
 
 TRACKS = [
     ("yt:AAAAAAAAAAA", "Rihanna - Easy Start", 210.0, 92.0, 0.25, 5),
@@ -18,6 +24,27 @@ TRACKS = [
     ("yt:EEEEEEEEEEE", "Other Artist - Recovery", 200.0, 84.0, 0.15, 4),
     ("yt:FFFFFFFFFFF", "Other Artist - Wild Card", 230.0, 128.0, 0.65, 15),
 ]
+
+
+def add_tracks(catalog_dir: Path, rows: list[tuple[str, str]]) -> None:
+    with sqlite3.connect(catalog_dir / "grade.sqlite3") as db:
+        for index, (track_id, title) in enumerate(rows):
+            duration = 200 + index
+            body = {
+                "trackId": track_id,
+                "bpm": 90 + index,
+                "energy": [{"t": 0, "e": 0.3}, {"t": duration, "e": 0.7}],
+                "boundaries": [100],
+                "structure": [{"kind": "section"}, {"kind": "section"}],
+            }
+            db.execute(
+                "INSERT INTO tracks VALUES (?, 'youtube', ?, ?)",
+                (track_id, title, duration),
+            )
+            db.execute(
+                "INSERT INTO analyses VALUES (?, 1, ?)",
+                (track_id, json.dumps(body)),
+            )
 
 
 @pytest.fixture()
@@ -100,6 +127,136 @@ def test_product_example_parses_hyphenated_count_artist_and_class() -> None:
     assert request.ride_types == {"hill": 5, "sprint": 4, "surprise": 1}
 
 
+def test_vague_request_does_not_return_the_entire_catalog(catalog_dir: Path) -> None:
+    add_tracks(
+        catalog_dir,
+        [(f"yt:{index:011d}", f"Catalog Artist - Song {index}") for index in range(41)],
+    )
+
+    result = agent(catalog_dir).plan("Make me a playlist.")
+
+    assert len(result.entries) == 10
+    assert result.validation.actual_song_count == 10
+
+
+def test_repeated_request_uses_reproducible_novelty_from_previous(catalog_dir: Path) -> None:
+    add_tracks(
+        catalog_dir,
+        [(f"yt:{index:011d}", f"Catalog Artist - Song {index}") for index in range(20)],
+    )
+    planner = agent(catalog_dir)
+    first = planner.plan("Give me a 10-song playlist.")
+    second = planner.plan("Give me a 10-song playlist.", first)
+    repeated_second = planner.plan("Give me a 10-song playlist.", first)
+
+    assert {entry.track_id for entry in first.entries}.isdisjoint(
+        entry.track_id for entry in second.entries
+    )
+    assert [entry.track_id for entry in repeated_second.entries] == [
+        entry.track_id for entry in second.entries
+    ]
+
+
+def test_five_song_followup_is_not_prefix_of_ten_song_result(catalog_dir: Path) -> None:
+    add_tracks(
+        catalog_dir,
+        [(f"yt:{index:011d}", f"Catalog Artist - Song {index}") for index in range(10)],
+    )
+    planner = agent(catalog_dir)
+    ten = planner.plan("Give me a 10-song playlist.")
+    five = planner.plan("Give me a 5-song playlist.", ten)
+
+    assert len(five.entries) == 5
+    assert [entry.track_id for entry in five.entries] != [
+        entry.track_id for entry in ten.entries[:5]
+    ]
+
+
+def test_make_this_larger_preserves_existing_tracks_and_adds_unique_tracks(
+    catalog_dir: Path,
+) -> None:
+    add_tracks(
+        catalog_dir,
+        [(f"yt:{index:011d}", f"Catalog Artist - Song {index}") for index in range(10)],
+    )
+    planner = agent(catalog_dir)
+    ten = planner.plan("Give me a 10-song playlist.")
+    fifteen = planner.plan("Make this a 15-song playlist.", ten)
+
+    assert len(fifteen.entries) == 15
+    assert [entry.track_id for entry in fifteen.entries[:10]] == [
+        entry.track_id for entry in ten.entries
+    ]
+    assert len({entry.track_id for entry in fifteen.entries}) == 15
+
+
+def test_named_song_replacement_uses_exact_catalog_track(catalog_dir: Path) -> None:
+    add_tracks(
+        catalog_dir,
+        [
+            ("yt:HHHHHHHHHHH", "Weird Al Yankovic - Hardware Store"),
+            ("yt:IIIIIIIIIII", "Rihanna - Breakin' Dishes"),
+        ],
+    )
+    planner = agent(catalog_dir)
+    initial = planner.plan("Give me an 8-song playlist.")
+    assert any(entry.title.endswith("Hardware Store") for entry in initial.entries)
+    initial.entries = [
+        entry for entry in initial.entries if not entry.title.endswith("Breakin' Dishes")
+    ]
+
+    revised = planner.plan("Replace Hardware Store with Breakin' Dishes", initial)
+
+    assert any(entry.title.endswith("Breakin' Dishes") for entry in revised.entries)
+    assert not any(entry.title.endswith("Hardware Store") for entry in revised.entries)
+    assert revised.validation.valid_track_ids
+
+
+def test_openai_mode_preserves_precise_local_named_revision() -> None:
+    interpreter = OpenAIRequestInterpreter("not-a-real-key")
+    model_request = {
+        "artist": None,
+        "song_count": 8,
+        "duration_minutes": None,
+        "intensity": None,
+        "ride_types": {},
+        "revision": {
+            "action": "replace",
+            "position": 1,
+            "ride_type": None,
+            "harder": False,
+            "target_title": None,
+            "replacement_title": None,
+        },
+    }
+    interpreter._client = SimpleNamespace(  # type: ignore[assignment]
+        responses=SimpleNamespace(
+            create=lambda **_: SimpleNamespace(output_text=json.dumps(model_request))
+        )
+    )
+
+    request = interpreter.interpret("Replace Hardware Store with Breakin' Dishes")
+
+    assert request.revision is not None
+    assert request.revision.target_title == "Hardware Store"
+    assert request.revision.replacement_title == "Breakin' Dishes"
+
+
+@pytest.mark.parametrize(
+    ("prompt", "artist"),
+    [
+        ("Give me a 3-song Rihanna playlist.", "Rihanna"),
+        ("Give me 3 songs by Rihanna.", "Rihanna"),
+        ("Build a playlist from Rihanna with 3 songs.", "Rihanna"),
+    ],
+)
+def test_artist_request_phrasings_are_consistent(prompt: str, artist: str) -> None:
+    request = RuleBasedRequestInterpreter().interpret(prompt)
+
+    assert request.song_count == 3
+    assert request.artist == artist
+
+
 def test_planner_sees_song_inserted_after_agent_creation(catalog_dir: Path) -> None:
     planner = agent(catalog_dir)
     assert planner.plan("Make me a New Artist class.").entries == []
@@ -141,6 +298,14 @@ def test_duration_drives_count_and_is_validated(catalog_dir: Path) -> None:
     assert len(result.entries) == 3
     assert result.validation.requested_duration_minutes == 12
     assert result.validation.actual_duration_minutes == pytest.approx(12, abs=2)
+
+
+def test_explicit_song_count_wins_over_conflicting_role_counts(catalog_dir: Path) -> None:
+    result = agent(catalog_dir).plan("Give me 2 songs with three hills and one sprint.")
+
+    assert len(result.entries) == 2
+    assert result.validation.requested_song_count == 2
+    assert any("Requested 3 hill" in item for item in result.shortfalls)
 
 
 def test_conversational_revision_replaces_named_role_with_harder_song(catalog_dir: Path) -> None:

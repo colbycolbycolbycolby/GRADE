@@ -55,9 +55,7 @@ class RuleBasedRequestInterpreter:
         )
         request.revision = None
 
-        count = re.search(
-            r"\b(\d+|" + "|".join(NUMBER_WORDS) + r")(?:-|\s+)songs?\b", lower
-        )
+        count = re.search(r"\b(\d+|" + "|".join(NUMBER_WORDS) + r")(?:-|\s+)songs?\b", lower)
         if count:
             request.song_count = self._number(count.group(1))
         duration = re.search(r"\b(\d+(?:\.\d+)?)\s*(?:minute|min)\b", lower)
@@ -65,7 +63,7 @@ class RuleBasedRequestInterpreter:
             request.duration_minutes = float(duration.group(1))
 
         artist = re.search(
-            r"(?:make|build|create)(?:\s+me)?(?:\s+a|\s+an)?"
+            r"(?:make|build|create|give)(?:\s+me)?(?:\s+a|\s+an)?"
             r"(?:\s+(?:\d+|" + "|".join(NUMBER_WORDS) + r")-?songs?)?"
             r"\s+(.+?)\s+(?:cycling\s+)?(?:playlist|class|ride)\b",
             text,
@@ -84,6 +82,28 @@ class RuleBasedRequestInterpreter:
                 else value
             )
 
+        by_artist = re.search(
+            r"\b(?:songs?|playlist|class|ride)\s+(?:by|from)\s+(.+?)"
+            r"(?:\s+(?:for|with|featuring)\b|[.!?,]|$)",
+            text,
+            re.IGNORECASE,
+        )
+        if by_artist:
+            request.artist = by_artist.group(1).strip()
+        artist_songs = re.search(
+            r"\b(?:\d+|"
+            + "|".join(word for word in NUMBER_WORDS if word not in {"a", "an"})
+            + r")[-\s]+([^\d,.!?]+?)\s+songs?\b",
+            text,
+            re.IGNORECASE,
+        )
+        if artist_songs and not re.search(
+            r"\b(?:minute|min|low|moderate|high|hill|climb|sprint|recovery)\b",
+            artist_songs.group(1),
+            re.IGNORECASE,
+        ):
+            request.artist = artist_songs.group(1).strip()
+
         for label in ("low", "moderate", "high"):
             if re.search(rf"\b{label}(?:-intensity|\s+intensity)?\b", lower):
                 request.intensity = label
@@ -101,6 +121,7 @@ class RuleBasedRequestInterpreter:
         if found_types:
             request.ride_types = ride_types
 
+        title_revision = re.search(r"\breplace\s+(.+?)\s+with\s+(.+?)[.!?]*$", text, re.IGNORECASE)
         revision = re.search(
             r"replace\s+the\s+(\d+|first|second|third|fourth|fifth)(?:\s+(hill|sprint|warmup|warm-up|recovery|surprise))?",
             lower,
@@ -118,6 +139,14 @@ class RuleBasedRequestInterpreter:
                 position=position,
                 ride_type=role,
                 harder="harder" in lower,
+            )
+        elif title_revision:
+            request.artist = None
+            request.revision = RevisionRequest(
+                action="replace",
+                position=1,
+                target_title=title_revision.group(1).strip(" \"'"),
+                replacement_title=title_revision.group(2).strip(" \"'"),
             )
         return request
 
@@ -175,7 +204,9 @@ class OpenAIRequestInterpreter:
                 interpreted.duration_minutes = local.duration_minutes
             if interpreted.intensity is None:
                 interpreted.intensity = local.intensity
-            if interpreted.revision is None:
+            # Explicit local revision forms are catalog-safe and more precise than a model's
+            # positional guess, especially for "replace Title A with Title B".
+            if local.revision is not None:
                 interpreted.revision = local.revision
             return interpreted
         except Exception:  # noqa: BLE001 - model/network failure must leave local planning usable
