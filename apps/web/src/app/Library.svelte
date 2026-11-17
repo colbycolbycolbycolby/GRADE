@@ -121,7 +121,7 @@
         <button type="button" class="open" onclick={() => onopen(program.id)}>
           <strong>{program.name}</strong>
           <span class="muted">
-            {titles[program.trackId] ?? ''} &middot; {program.clips.length} blocks &middot;
+            {titles[program.trackId] ?? ''} &middot; {program.segments.length} sections &middot;
             {formatTime(classSeconds(program))}
           </span>
         </button>

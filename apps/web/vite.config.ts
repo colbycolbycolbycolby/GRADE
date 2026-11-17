@@ -1,8 +1,19 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
+import { execFileSync } from 'node:child_process';
+
+function buildId(): string {
+  if (process.env.GRADE_BUILD_ID) return process.env.GRADE_BUILD_ID;
+  try {
+    return execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch {
+    return 'development';
+  }
+}
 
 export default defineConfig({
+  define: { __GRADE_BUILD_ID__: JSON.stringify(buildId()) },
   plugins: [
     svelte(),
     // The service worker caches the app shell only. It never touches `/api`, so audio and Range

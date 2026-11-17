@@ -3,6 +3,7 @@ import { EPS, GENUINE_CUT_SEC } from './constants';
 import { segmentTitle } from './titles';
 
 export interface ScheduleItem {
+  /** @deprecated Kept for UI/event compatibility. Segment schedules use the segment id here. */
   clipId: string;
   segmentId: string;
   tier: Tier;
@@ -13,27 +14,23 @@ export interface ScheduleItem {
   classEnd: number;
 }
 
-/** The class timeline is the clips laid end to end. */
+/**
+ * The active class timeline is the instructor-authored waveform, in chronological song order.
+ * Legacy clips remain on Program records for rollback compatibility, but never affect playback.
+ */
 export function buildSchedule(program: Program): ScheduleItem[] {
-  const items: ScheduleItem[] = [];
-  let t = 0;
-  for (const clip of program.clips) {
-    const seg = program.segments.find((s) => s.id === clip.segmentId);
-    if (!seg) continue;
-    const len = clip.end - clip.start;
-    items.push({
-      clipId: clip.id,
+  return [...program.segments]
+    .sort((a, b) => a.start - b.start)
+    .map((seg) => ({
+      clipId: seg.id,
       segmentId: seg.id,
       tier: seg.tier,
       title: segmentTitle(program, seg),
-      realStart: clip.start,
-      realEnd: clip.end,
-      classStart: t,
-      classEnd: t + len,
-    });
-    t += len;
-  }
-  return items;
+      realStart: seg.start,
+      realEnd: seg.end,
+      classStart: seg.start,
+      classEnd: seg.end,
+    }));
 }
 
 export function classDuration(schedule: ScheduleItem[]): number {

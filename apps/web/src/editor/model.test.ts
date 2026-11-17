@@ -63,21 +63,13 @@ describe('editor model', () => {
     expect(canUndoState(s)).toBe(false);
   });
 
-  test('removing every block is refused', () => {
-    let s = createEditor(makeProgram());
-    const n = programOf(s).clips.length;
-    s = run([{ type: 'remove', indices: Array.from({ length: n }, (_, i) => i) }], s);
-    expect(s.notice?.kind).toBe('error');
-    expect(programOf(s).clips).toHaveLength(n);
-  });
-
-  test('deleting a section tells the user what happened to the class order', () => {
+  test('deleting a section explains the runner boundary update', () => {
     const base = createEditor(makeProgram());
     const id = programOf(base).segments[1]!.id;
     const s = run([{ type: 'delete-segment', segmentId: id }], base);
     expect(programOf(s).segments).toHaveLength(3);
     expect(s.notice?.kind).toBe('info');
-    expect(s.notice?.text).toMatch(/removed/);
+    expect(s.notice?.text).toMatch(/countdowns follow.*waveform boundaries/i);
   });
 
   test('moving a boundary changes two neighbours', () => {
@@ -85,27 +77,6 @@ describe('editor model', () => {
     const segs = programOf(s).segments;
     expect(segs[0]!.end).toBe(20);
     expect(segs[1]!.start).toBe(20);
-  });
-
-  test('group selection, reorder and duplicate', () => {
-    let s = run([
-      { type: 'toggle-clip', index: 3 },
-      { type: 'toggle-clip', index: 1 },
-    ]);
-    expect(s.selectedClips).toEqual([1, 3]);
-    const ids = programOf(s).clips.map((c) => c.id);
-    s = run([{ type: 'reorder', indices: [1, 3], to: 0 }], s);
-    expect(programOf(s).clips.map((c) => c.id)).toEqual([ids[1], ids[3], ids[0], ids[2]]);
-    expect(s.selectedClips).toEqual([]);
-    s = run([{ type: 'duplicate', indices: [0, 1] }], s);
-    expect(programOf(s).clips).toHaveLength(6);
-  });
-
-  test('trim keeps the clip inside its section', () => {
-    const base = createEditor(makeProgram());
-    const clip = programOf(base).clips[0]!;
-    const s = run([{ type: 'trim', clipId: clip.id, start: 5, end: 20 }], base);
-    expect(programOf(s).clips[0]).toMatchObject({ start: 5, end: 20 });
   });
 
   test('intervals replace the song after the start time', () => {
@@ -132,6 +103,6 @@ describe('editor model', () => {
 
   test('describeChanges is empty for no changes', () => {
     expect(describeChanges([])).toBeNull();
-    expect(describeChanges([{ kind: 'order-reset' }])).toMatch(/song order/);
+    expect(describeChanges([{ kind: 'order-reset' }])).toMatch(/waveform boundaries/);
   });
 });

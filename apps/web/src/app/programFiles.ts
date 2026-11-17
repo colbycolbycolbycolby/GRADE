@@ -43,5 +43,5 @@ export async function importProgramText(services: Services, text: string): Promi
 
 /** Total class length in seconds. */
 export function classSeconds(program: Program): number {
-  return program.clips.reduce((sum, c) => sum + (c.end - c.start), 0);
+  return program.segments?.at(-1)?.end ?? 0;
 }

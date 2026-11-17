@@ -86,10 +86,8 @@ describe('Editor', () => {
     const root = await open();
     await setValue(byLabel<HTMLInputElement>(root, 'Section name'), 'Hill');
     expect(root.querySelector('.labels .label .name')?.textContent).toBe('Hill');
-    const options = [...root.querySelectorAll('datalist option')].map((o) =>
-      o.getAttribute('value'),
-    );
-    expect(options).toContain('Hill');
+    await click(button(root, 'Reuse a title'));
+    expect(button(root, 'Hill')).toBeTruthy();
     const p = await until(saved, (x) => x?.segments[0]?.label === 'Hill');
     expect(segmentTitle(p!, p!.segments[1]!)).toBe('Section 2');
   });
@@ -107,7 +105,7 @@ describe('Editor', () => {
     expect(root.querySelector('[aria-label="Selected section"] h2')?.textContent).toBe('Section 1');
   });
 
-  test('merge and delete remove sections, and the user is told about the class order', async () => {
+  test('merge and delete remove sections and explain the runner boundary update', async () => {
     const root = await open();
     await click(root.querySelectorAll<HTMLElement>('.labels .label')[1]!);
     await click(button(root, 'Merge into previous'));
@@ -115,7 +113,7 @@ describe('Editor', () => {
     await click(button(root, 'Delete section'));
     expect(root.querySelectorAll('.labels .label')).toHaveLength(2);
     expect(root.querySelector('.banner[role="status"]')?.textContent).toMatch(
-      /Class order changed/,
+      /countdowns follow.*waveform boundaries/i,
     );
   });
 
@@ -179,69 +177,6 @@ describe('Editor', () => {
     const p = await until(saved, (x) => x?.segments[0]?.end === 30.5);
     expect(p!.segments[1]!.start).toBe(30.5);
     expect(divider.getAttribute('aria-valuenow')).toBe('30.5');
-  });
-
-  test('the block list repeats, reorders and removes blocks from the order', async () => {
-    const root = await open();
-    await click(byLabel(root, 'Repeat block 1'));
-    expect(root.querySelectorAll('.block')).toHaveLength(5);
-    await click(byLabel(root, 'Move block 1 later'));
-    const titles = [...root.querySelectorAll('.block strong')].map((e) => e.textContent);
-    expect(titles[0]).toBe('1. Section 1');
-    await click(byLabel(root, 'Remove block 2 from the class order'));
-    expect(root.querySelectorAll('.block')).toHaveLength(4);
-    await until(saved, (x) => x?.clips.length === 4);
-  });
-
-  test('the last block cannot be removed from the order', async () => {
-    const program = makeProgram();
-    const one = { ...program, clips: [program.clips[0]!] };
-    const root = await open(one);
-    expect(byLabel<HTMLButtonElement>(root, 'Remove block 1 from the class order').disabled).toBe(
-      true,
-    );
-  });
-
-  test('select several blocks, then repeat them as a group', async () => {
-    const root = await open();
-    await click(byLabel(root, 'Select block 1'));
-    await click(byLabel(root, 'Select block 3'));
-    expect(root.querySelector('[aria-label="Selected blocks"]')?.textContent).toMatch(/2 selected/);
-    await click(button(root, 'Repeat selected'));
-    expect(root.querySelectorAll('.block')).toHaveLength(6);
-    expect(root.querySelector('[aria-label="Selected blocks"]')).toBeNull();
-  });
-
-  test('drag a tile to the end of the strip to reorder', async () => {
-    const program = makeProgram();
-    const root = await open(program);
-    const strip = root.querySelector<HTMLElement>('.strip')!;
-    const tiles = strip.querySelectorAll<HTMLElement>('[data-tile]');
-    tiles[0]!.dispatchEvent(new Event('dragstart', { bubbles: true }));
-    strip.dispatchEvent(
-      new MouseEvent('dragover', { bubbles: true, cancelable: true, clientX: 999 }),
-    );
-    strip.dispatchEvent(new Event('drop', { bubbles: true, cancelable: true }));
-    await settle();
-    const first = (await until(saved, (x) => x?.clips[3]?.id === program.clips[0]!.id))!;
-    expect(first.clips[3]!.id).toBe(program.clips[0]!.id);
-  });
-
-  test('drop a tile on the repeat and remove zones', async () => {
-    const root = await open();
-    const tile = () => root.querySelectorAll<HTMLElement>('[data-tile]')[1]!;
-    tile().dispatchEvent(new Event('dragstart', { bubbles: true }));
-    byLabel(root, 'Drop here to repeat').dispatchEvent(
-      new Event('drop', { bubbles: true, cancelable: true }),
-    );
-    await settle();
-    expect(root.querySelectorAll('[data-tile]')).toHaveLength(5);
-    tile().dispatchEvent(new Event('dragstart', { bubbles: true }));
-    byLabel(root, 'Drop here to remove from the class order').dispatchEvent(
-      new Event('drop', { bubbles: true, cancelable: true }),
-    );
-    await settle();
-    expect(root.querySelectorAll('[data-tile]')).toHaveLength(4);
   });
 
   test('the interval form replaces the song after the playhead', async () => {
@@ -329,30 +264,5 @@ describe('Editor pointer drags', () => {
     divider.dispatchEvent(pointer('pointerup', 1));
     await settle();
     await until(saved, (x) => x?.segments[0]?.end === 2);
-  });
-
-  test('dragging the end edge of a tile trims the clip', async () => {
-    const root = await open();
-    const tile = root.querySelector<HTMLElement>('[data-tile]')!;
-    tile.getBoundingClientRect = rect(120); // 30 s over 120 px: 0.25 s per px
-    const edge = tile.querySelector<HTMLElement>('.edge.end')!;
-    edge.dispatchEvent(pointer('pointerdown', 100));
-    edge.dispatchEvent(pointer('pointermove', 60)); // 40 px left = 10 s
-    edge.dispatchEvent(pointer('pointerup', 60));
-    await settle();
-    const p = await until(saved, (x) => x?.clips[0]?.end === 20);
-    expect(p!.clips[0]!.start).toBe(0);
-  });
-
-  test('dragging the start edge trims from the front, never below 1 s', async () => {
-    const root = await open();
-    const tile = root.querySelector<HTMLElement>('[data-tile]')!;
-    tile.getBoundingClientRect = rect(120);
-    const edge = tile.querySelector<HTMLElement>('.edge.start')!;
-    edge.dispatchEvent(pointer('pointerdown', 0));
-    edge.dispatchEvent(pointer('pointermove', 5000));
-    edge.dispatchEvent(pointer('pointerup', 5000));
-    await settle();
-    await until(saved, (x) => x?.clips[0]?.start === 29);
   });
 });

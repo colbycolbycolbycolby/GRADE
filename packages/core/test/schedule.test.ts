@@ -3,14 +3,11 @@ import {
   buildSchedule,
   classDuration,
   classToRealTime,
-  duplicateClips,
   isGenuineCut,
   itemIndexAtClassTime,
-  reorderClips,
   segmentTitle,
   setLabel,
   similarityHint,
-  trimClip,
 } from '../src/index';
 import { counterId, makeProgram } from './helpers';
 
@@ -18,6 +15,29 @@ const pick = (items: ReturnType<typeof buildSchedule>) =>
   items.map((i) => [i.title, i.tier, i.realStart, i.realEnd, i.classStart, i.classEnd]);
 
 describe('buildSchedule (hand-computed fixtures)', () => {
+  test('nine instructor segments produce nine countdowns despite nineteen legacy clips', () => {
+    const p = makeProgram(Array.from({ length: 9 }, () => [20, 'hard'] as const));
+    p.clips = Array.from({ length: 19 }, (_, i) => ({
+      ...p.clips[i % p.clips.length]!,
+      id: `legacy-${i}`,
+    }));
+    const schedule = buildSchedule(p);
+    expect(schedule).toHaveLength(9);
+    expect(schedule.map((item) => [item.realStart, item.realEnd])).toEqual(
+      p.segments.map((segment) => [segment.start, segment.end]),
+    );
+  });
+
+  test('adjacent identical instructions remain exactly one countdown per segment', () => {
+    const p = makeProgram([
+      [30, 'hard'],
+      [30, 'hard'],
+      [30, 'hard'],
+    ]);
+    p.segments = p.segments.map((segment) => ({ ...segment, label: 'Climb' }));
+    expect(buildSchedule(p)).toHaveLength(3);
+  });
+
   test('fixture 1: untouched program is chronological', () => {
     const p = makeProgram([
       [10, 'easy', 'intro'],
@@ -33,21 +53,22 @@ describe('buildSchedule (hand-computed fixtures)', () => {
     ]);
   });
 
-  test('fixture 2: reordered, duplicated and trimmed', () => {
+  test('fixture 2: legacy reordered, duplicated and trimmed clips are ignored', () => {
     let p = makeProgram([
       [10, 'easy', 'intro'],
       [30, 'hard'],
       [20, 'allout'],
     ]);
     p = setLabel(p, 's3', 'Chorus');
-    p = trimClip(p, 'c3', 40, 50); // chorus trimmed to 10s
-    p = duplicateClips(p, [2], { newId: counterId() }); // chorus twice
-    p = reorderClips(p, [0], 4); // intro to the end
+    p.clips = [
+      { ...p.clips[2]!, start: 40, end: 50 },
+      { ...p.clips[2]!, id: counterId()() },
+      p.clips[0]!,
+    ];
     expect(pick(buildSchedule(p))).toEqual([
-      ['Section 1', 'hard', 10, 40, 0, 30],
-      ['Chorus', 'allout', 40, 50, 30, 40],
-      ['Chorus', 'allout', 40, 50, 40, 50],
-      ['Intro', 'easy', 0, 10, 50, 60],
+      ['Intro', 'easy', 0, 10, 0, 10],
+      ['Section 1', 'hard', 10, 40, 10, 40],
+      ['Chorus', 'allout', 40, 60, 40, 60],
     ]);
   });
 
@@ -64,8 +85,7 @@ describe('schedule helpers', () => {
     [10, 'hard'],
     [10, 'allout'],
   ]);
-  const reordered = reorderClips(p, [2], 0); // s3, s1, s2
-  const items = buildSchedule(reordered);
+  const items = buildSchedule({ ...p, clips: [...p.clips].reverse() });
 
   test('isGenuineCut ignores gaps of 0.05s or less', () => {
     expect(isGenuineCut(10, 10)).toBe(false);
@@ -77,8 +97,8 @@ describe('schedule helpers', () => {
     expect(itemIndexAtClassTime(items, 0)).toBe(0);
     expect(itemIndexAtClassTime(items, 10)).toBe(1);
     expect(itemIndexAtClassTime(items, 999)).toBe(2);
-    expect(classToRealTime(items, 5)).toBe(25);
-    expect(classToRealTime(items, 12)).toBe(2);
+    expect(classToRealTime(items, 5)).toBe(5);
+    expect(classToRealTime(items, 12)).toBe(12);
   });
   test('titles number sections by position and skip intro and outro', () => {
     const q = makeProgram([

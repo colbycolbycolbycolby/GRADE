@@ -28,7 +28,7 @@
       ? plan.programIds.reduce((sum, pid) => sum + classSeconds(byId.get(pid) ?? emptyLike), 0)
       : 0,
   );
-  const emptyLike = { clips: [] } as unknown as Program;
+  const emptyLike = { segments: [], clips: [] } as unknown as Program;
 
   onMount(async () => {
     try {

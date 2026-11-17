@@ -46,6 +46,8 @@ class RequestInterpreter(Protocol):
 class RuleBasedRequestInterpreter:
     """Predictable local interpreter used for tests and as an API outage fallback."""
 
+    last_mode = "deterministic"
+
     def interpret(self, text: str, previous: PlaylistProposal | None = None) -> PlaylistRequest:
         lower = text.casefold()
         request = (
@@ -162,6 +164,7 @@ class OpenAIRequestInterpreter:
         self._client = OpenAI(api_key=api_key)
         self._model = model
         self._fallback = RuleBasedRequestInterpreter()
+        self.last_mode = "deterministic"
 
     def interpret(self, text: str, previous: PlaylistProposal | None = None) -> PlaylistRequest:
         prior = previous.model_dump(mode="json") if previous else None
@@ -193,6 +196,7 @@ class OpenAIRequestInterpreter:
                 },
             )
             interpreted = PlaylistRequest.model_validate_json(response.output_text)
+            self.last_mode = "openai-assisted"
             local = self._fallback.interpret(text, previous)
             if not interpreted.ride_types:
                 interpreted.ride_types = local.ride_types
@@ -210,4 +214,5 @@ class OpenAIRequestInterpreter:
                 interpreted.revision = local.revision
             return interpreted
         except Exception:  # noqa: BLE001 - model/network failure must leave local planning usable
+            self.last_mode = "deterministic"
             return self._fallback.interpret(text, previous)

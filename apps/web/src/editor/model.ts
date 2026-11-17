@@ -5,17 +5,13 @@ import {
   createHistory,
   CoreError,
   deleteSegment,
-  duplicateClips,
   generateIntervals,
   mergeIntoPrevious,
   moveBoundary,
   redo,
-  removeClips,
-  reorderClips,
   setLabel,
   setTier,
   splitSegment,
-  trimClip,
   undo,
   type Change,
   type EditResult,
@@ -31,8 +27,6 @@ export interface Notice {
 export interface EditorState {
   history: History<Program>;
   selectedSegmentId: string | null;
-  /** Indices into `program.clips`. */
-  selectedClips: number[];
   /** Real song time (crop-relative) of the playhead. */
   playhead: number;
   notice: Notice | null;
@@ -40,8 +34,6 @@ export interface EditorState {
 
 export type Command =
   | { type: 'select-segment'; id: string | null }
-  | { type: 'toggle-clip'; index: number }
-  | { type: 'clear-clip-selection' }
   | { type: 'set-playhead'; t: number }
   | { type: 'set-tier'; segmentId: string; tier: Tier }
   | { type: 'set-label'; segmentId: string; label: string | null }
@@ -49,10 +41,6 @@ export type Command =
   | { type: 'merge'; segmentId: string }
   | { type: 'delete-segment'; segmentId: string }
   | { type: 'move-boundary'; index: number; to: number }
-  | { type: 'reorder'; indices: number[]; to: number }
-  | { type: 'duplicate'; indices: number[] }
-  | { type: 'remove'; indices: number[] }
-  | { type: 'trim'; clipId: string; start: number; end: number }
   | { type: 'intervals'; from: number; onSec: number; offSec: number; label?: string }
   | { type: 'rename-program'; name: string }
   | { type: 'undo' }
@@ -68,7 +56,6 @@ export function createEditor(program: Program): EditorState {
   return {
     history: createHistory(program),
     selectedSegmentId: program.segments[0]?.id ?? null,
-    selectedClips: [],
     playhead: 0,
     notice: null,
   };
@@ -85,16 +72,7 @@ export function usedLabels(program: Program): string[] {
 
 export function describeChanges(changes: Change[]): string | null {
   if (changes.length === 0) return null;
-  if (changes.some((c) => c.kind === 'order-reset')) {
-    return 'The class order could not be kept. It is now in song order.';
-  }
-  const count = (k: Change['kind']) => changes.filter((c) => c.kind === k).length;
-  const parts: string[] = [];
-  if (count('clip-dropped')) parts.push(`${count('clip-dropped')} removed`);
-  if (count('clip-remapped')) parts.push(`${count('clip-remapped')} moved to a new section`);
-  if (count('clip-split')) parts.push(`${count('clip-split')} split`);
-  if (count('clip-trimmed')) parts.push(`${count('clip-trimmed')} shortened`);
-  return `Class order changed: ${parts.join(', ')}.`;
+  return 'Sections updated. Runner countdowns follow these waveform boundaries.';
 }
 
 function selectionAfter(s: EditorState, program: Program): string | null {
@@ -110,7 +88,7 @@ export function reduce(s: EditorState, c: Command, env: Env): EditorState {
 
   const edit = (next: Program, extra: Partial<EditorState> = {}, notice: Notice | null = null) => {
     const history = commit(s.history, stamp(next));
-    return { ...s, ...extra, history, notice, selectedClips: extra.selectedClips ?? [] };
+    return { ...s, ...extra, history, notice };
   };
   const structural = (r: EditResult): EditorState => {
     const text = describeChanges(r.changes);
@@ -122,21 +100,12 @@ export function reduce(s: EditorState, c: Command, env: Env): EditorState {
     switch (c.type) {
       case 'select-segment':
         return { ...s, selectedSegmentId: c.id };
-      case 'toggle-clip': {
-        const has = s.selectedClips.includes(c.index);
-        const selectedClips = has
-          ? s.selectedClips.filter((i) => i !== c.index)
-          : [...s.selectedClips, c.index].sort((a, b) => a - b);
-        return { ...s, selectedClips };
-      }
-      case 'clear-clip-selection':
-        return { ...s, selectedClips: [] };
       case 'set-playhead':
         return { ...s, playhead: Math.max(c.t, 0) };
       case 'set-tier':
-        return edit(setTier(program, c.segmentId, c.tier), { selectedClips: s.selectedClips });
+        return edit(setTier(program, c.segmentId, c.tier));
       case 'set-label':
-        return edit(setLabel(program, c.segmentId, c.label), { selectedClips: s.selectedClips });
+        return edit(setLabel(program, c.segmentId, c.label));
       case 'split':
         return structural(splitSegment(program, c.segmentId, c.at, opts));
       case 'merge':
@@ -145,29 +114,15 @@ export function reduce(s: EditorState, c: Command, env: Env): EditorState {
         return structural(deleteSegment(program, c.segmentId, opts));
       case 'move-boundary':
         return structural(moveBoundary(program, c.index, c.to, opts));
-      case 'reorder':
-        return edit(reorderClips(program, c.indices, c.to));
-      case 'duplicate':
-        return edit(duplicateClips(program, c.indices, opts));
-      case 'remove':
-        return edit(removeClips(program, c.indices));
-      case 'trim':
-        return edit(trimClip(program, c.clipId, c.start, c.end));
       case 'intervals':
         return structural(generateIntervals(program, c.from, c.onSec, c.offSec, c.label, opts));
       case 'rename-program':
-        return edit(
-          { ...program, name: c.name.trim() || program.name },
-          {
-            selectedClips: s.selectedClips,
-          },
-        );
+        return edit({ ...program, name: c.name.trim() || program.name }, {});
       case 'undo': {
         const history = undo(s.history);
         return {
           ...s,
           history,
-          selectedClips: [],
           selectedSegmentId: selectionAfter(s, history.present),
           notice: null,
         };
@@ -177,7 +132,6 @@ export function reduce(s: EditorState, c: Command, env: Env): EditorState {
         return {
           ...s,
           history,
-          selectedClips: [],
           selectedSegmentId: selectionAfter(s, history.present),
           notice: null,
         };

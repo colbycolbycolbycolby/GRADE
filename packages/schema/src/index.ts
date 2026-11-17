@@ -116,6 +116,7 @@ export const PlaylistEntrySchema = z.object({
 export type PlaylistEntry = z.infer<typeof PlaylistEntrySchema>;
 
 export const PlaylistProposalSchema = z.object({
+  interpretation_mode: z.enum(['deterministic', 'openai-assisted']).default('deterministic'),
   status: z.enum(['complete', 'partial', 'impossible']),
   understood_request: PlaylistRequestSchema,
   summary: z.string(),

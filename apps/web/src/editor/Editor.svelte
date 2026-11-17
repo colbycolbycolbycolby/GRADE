@@ -6,8 +6,6 @@
   import type { Services } from '../app/services';
   import { hrefs } from '../app/router';
   import { OffsetBackend, type PlaybackBackend } from '../playback';
-  import BlockList from './BlockList.svelte';
-  import ClassStrip from './ClassStrip.svelte';
   import { clampBoundary, formatTime } from './geometry';
   import IntervalForm from './IntervalForm.svelte';
   import { canRedoState, canUndoState, usedLabels } from './model';
@@ -337,15 +335,6 @@
   {/if}
 
   <IntervalForm playhead={ed.playhead} {duration} dispatch={(c) => store.dispatch(c)} />
-
-  <ClassStrip {program} selectedClips={ed.selectedClips} dispatch={(c) => store.dispatch(c)} />
-
-  <BlockList
-    {program}
-    selectedClips={ed.selectedClips}
-    playhead={ed.playhead}
-    dispatch={(c) => store.dispatch(c)}
-  />
 </main>
 
 <style>

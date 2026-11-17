@@ -82,6 +82,8 @@
       The effect needs the local audio player. It has no effect on songs that play from YouTube.
     </p>
   </fieldset>
+
+  <p class="build-id muted">Development build <code>{__GRADE_BUILD_ID__}</code></p>
 </main>
 
 <style>
@@ -102,5 +104,9 @@
   }
   a {
     text-decoration: none;
+  }
+  .build-id {
+    margin-top: 28px;
+    font-size: 0.78rem;
   }
 </style>

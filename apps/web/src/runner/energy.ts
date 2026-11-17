@@ -6,7 +6,7 @@ export interface EnergyPoint {
   e: number;
 }
 
-/** The energy curve laid out in class order: x is class time. Analysis time is original-file time. */
+/** The energy curve laid out in chronological segment order. Analysis time is original-file time. */
 export function classEnergy(analysis: Analysis, schedule: ScheduleItem[]): EnergyPoint[] {
   const out: EnergyPoint[] = [];
   for (const item of schedule) {

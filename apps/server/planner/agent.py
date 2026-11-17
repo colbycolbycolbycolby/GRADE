@@ -294,6 +294,7 @@ class PlaylistAgent:
             else "No analyzed catalog songs satisfy the request."
         )
         return PlaylistProposal(
+            interpretation_mode=getattr(self._interpreter, "last_mode", "deterministic"),
             status=status,
             understood_request=request,
             summary=summary,

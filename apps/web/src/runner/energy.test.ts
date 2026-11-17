@@ -13,13 +13,13 @@ describe('classEnergy', () => {
     for (let i = 1; i < points.length; i++) expect(points[i]!.t).toBeGreaterThan(points[i - 1]!.t);
   });
 
-  test('a repeated clip appears twice', () => {
+  test('legacy repeated clips do not duplicate the energy timeline', () => {
     const analysis = makeAnalysis();
     const program = makeProgram();
     const first = program.clips[0]!;
     const doubled = { ...program, clips: [first, { ...first, id: 'dup' }] };
     const once = classEnergy(analysis, buildSchedule({ ...program, clips: [first] }));
-    expect(classEnergy(analysis, buildSchedule(doubled))).toHaveLength(once.length * 2);
+    expect(classEnergy(analysis, buildSchedule(doubled))).toEqual(once);
   });
 });
 

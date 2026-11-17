@@ -63,6 +63,7 @@ class ConstraintValidation(BaseModel):
 
 
 class PlaylistProposal(BaseModel):
+    interpretation_mode: Literal["deterministic", "openai-assisted"] = "deterministic"
     status: Literal["complete", "partial", "impossible"]
     understood_request: PlaylistRequest
     summary: str

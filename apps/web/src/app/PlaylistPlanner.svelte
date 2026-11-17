@@ -146,6 +146,12 @@
           >{formatTime(proposal.entries.reduce((sum, entry) => sum + entry.duration, 0))}</strong
         >
       </div>
+      <p class="muted interpretation-mode">
+        Interpretation: {proposal.interpretation_mode === 'openai-assisted'
+          ? 'OpenAI-assisted constraints'
+          : 'deterministic local constraints'} · Song selection: catalog scoring from tempo and analyzed
+        energy
+      </p>
 
       {#if proposal.shortfalls.length}
         <div class="banner shortfall">
