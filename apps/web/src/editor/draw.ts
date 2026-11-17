@@ -46,10 +46,15 @@ export function drawWaveform(ctx: CanvasRenderingContext2D, input: DrawInput): v
   }
   const sel = segments[input.selectedIndex];
   if (sel) {
-    ctx.strokeStyle = input.selectedOutline;
-    ctx.lineWidth = 2;
     const x0 = (sel.start / duration) * width;
     const x1 = (sel.end / duration) * width;
-    ctx.strokeRect(x0 + 1, 1, Math.max(x1 - x0 - 2, 1), height - 2);
+    const selectedWidth = Math.max(x1 - x0, 1);
+    ctx.save();
+    ctx.fillStyle = input.selectedOutline;
+    ctx.globalAlpha = 0.08;
+    ctx.fillRect(x0, 0, selectedWidth, height);
+    ctx.globalAlpha = 0.75;
+    ctx.fillRect(x0, height - 3, selectedWidth, 3);
+    ctx.restore();
   }
 }

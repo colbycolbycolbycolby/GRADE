@@ -54,18 +54,22 @@
       segments: shown,
       selectedIndex,
       colors: readTierColors(el),
-      selectedOutline: getComputedStyle(el).getPropertyValue('color') || '#000',
+      selectedOutline: getComputedStyle(el).getPropertyValue('--accent').trim() || '#5f5cff',
     });
   });
 
   function timeAt(event: PointerEvent): number {
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const target = event.currentTarget as HTMLElement;
+    const surface = target.classList.contains('section-hit') ? target.parentElement! : target;
+    const rect = surface.getBoundingClientRect();
     return xToTime(event.clientX - rect.left, duration, rect.width);
   }
 
-  function pick(event: PointerEvent) {
+  function pick(event: PointerEvent, segmentId?: string) {
     const t = timeAt(event);
-    const seg = program.segments[segmentIndexAt(program.segments, t)];
+    const seg = segmentId
+      ? program.segments.find((candidate) => candidate.id === segmentId)
+      : program.segments[segmentIndexAt(program.segments, t)];
     if (seg) onselect(seg.id);
     onseek(t);
   }
@@ -112,13 +116,21 @@
 
 <div class="waveform">
   <div class="plot" bind:clientWidth={width} style:height="{height}px">
-    <canvas
-      bind:this={canvas}
-      style:width="100%"
-      style:height="{height}px"
-      onpointerdown={pick}
-      aria-label="Song waveform. Tap to pick a section and move the playhead."
+    <canvas bind:this={canvas} style:width="100%" style:height="{height}px" aria-hidden="true"
     ></canvas>
+    {#each program.segments as seg (seg.id)}
+      <button
+        type="button"
+        class="section-hit"
+        class:selected={seg.id === selectedId}
+        style:left={pct(seg.start)}
+        style:width={pct(seg.end - seg.start)}
+        aria-label={`Select ${segmentTitle(program, seg)} on waveform`}
+        aria-pressed={seg.id === selectedId}
+        title={`Select ${segmentTitle(program, seg)}`}
+        onpointerdown={(event) => pick(event, seg.id)}
+      ></button>
+    {/each}
     <div class="playhead" style:left={pct(playhead)} aria-hidden="true"></div>
     {#each program.segments.slice(0, -1) as seg, i (seg.id)}
       <div
@@ -179,7 +191,22 @@
   }
   canvas {
     display: block;
+  }
+  .section-hit {
+    position: absolute;
+    z-index: 1;
+    inset-block: 0;
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     cursor: pointer;
+  }
+  .section-hit:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -3px;
   }
   .playhead {
     position: absolute;
@@ -188,6 +215,7 @@
     width: 2px;
     background: var(--text);
     pointer-events: none;
+    z-index: 3;
   }
   .divider {
     position: absolute;
@@ -197,6 +225,7 @@
     margin-left: -12px;
     cursor: ew-resize;
     touch-action: none;
+    z-index: 2;
   }
   .divider::after {
     content: '';
@@ -236,8 +265,8 @@
     text-align: left;
   }
   .label.selected {
-    border-color: var(--accent);
-    border-width: 2px;
+    border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+    box-shadow: inset 0 -3px var(--accent);
   }
   .swatch {
     display: block;
