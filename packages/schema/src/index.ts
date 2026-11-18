@@ -6,6 +6,21 @@ export const TierSchema = z.enum(['easy', 'moderate', 'hard', 'allout']);
 export type Tier = z.infer<typeof TierSchema>;
 export const TIERS: readonly Tier[] = TierSchema.options;
 
+export const WorkoutFormatSchema = z.enum([
+  'warmup',
+  'endurance',
+  'hills_climb',
+  'intervals',
+  'sprint',
+  'recovery',
+  'cooldown',
+  'mixed',
+]);
+export type WorkoutFormat = z.infer<typeof WorkoutFormatSchema>;
+
+export const PositionSchema = z.enum(['seated', 'standing', 'mixed']);
+export type Position = z.infer<typeof PositionSchema>;
+
 const seconds = z.number().finite().nonnegative();
 
 export const TrackSchema = z.object({
@@ -51,6 +66,17 @@ export const SegmentSchema = z.object({
   label: z.string().nullable(),
   kind: z.enum(['intro', 'outro', 'section']),
   similarTo: z.string().optional(),
+  resistanceZone: z.number().int().min(1).max(5).optional(),
+  cadence: z
+    .object({
+      minRpm: z.number().int().min(1).max(250),
+      maxRpm: z.number().int().min(1).max(250).optional(),
+    })
+    .refine((value) => value.maxRpm === undefined || value.maxRpm >= value.minRpm, {
+      message: 'Cadence range maximum must be at least the minimum',
+    })
+    .optional(),
+  position: PositionSchema.optional(),
 });
 export type Segment = z.infer<typeof SegmentSchema>;
 
@@ -67,6 +93,8 @@ export const ProgramSchema = z.object({
   name: z.string(),
   trackId: z.string(),
   analysisVersion: z.number().int().nonnegative(),
+  tags: z.array(z.string().min(1)).optional(),
+  workoutFormat: WorkoutFormatSchema.optional(),
   segments: z.array(SegmentSchema).min(1),
   clips: z.array(ClipSchema).min(1),
   updatedAt: z.string(),

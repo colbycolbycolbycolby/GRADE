@@ -11,4 +11,5 @@ export * from './schedule';
 export * from './serialize';
 export * from './history';
 export * from './program';
+export * from './workout';
 export { defaultClips } from './repair';

@@ -204,6 +204,11 @@
     background: transparent;
     cursor: pointer;
   }
+  .section-hit:hover,
+  .section-hit.selected {
+    background: transparent;
+    box-shadow: inset 0 -3px var(--accent);
+  }
   .section-hit:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -3px;

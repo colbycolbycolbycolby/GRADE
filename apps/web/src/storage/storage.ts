@@ -1,3 +1,4 @@
+import { programWorkoutMetadata } from '@grade/core';
 import type { Analysis, ClassPlan, Program, Track } from '@grade/schema';
 import { GradeDb } from './db';
 
@@ -63,6 +64,9 @@ export class Storage {
     return guard('list the programs', async () =>
       (await this.db.programs.toArray()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     );
+  }
+  async listProgramWorkoutMetadata() {
+    return (await this.listPrograms()).map(programWorkoutMetadata);
   }
   deleteProgram(id: string): Promise<void> {
     return guard('delete the program', () => this.db.programs.delete(id));

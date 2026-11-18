@@ -8,16 +8,18 @@ import {
   generateIntervals,
   mergeIntoPrevious,
   moveBoundary,
+  recognizeWorkoutTitle,
   redo,
   setLabel,
   setTier,
+  setWorkoutFields,
   splitSegment,
   undo,
   type Change,
   type EditResult,
   type History,
 } from '@grade/core';
-import type { Program, Tier } from '@grade/schema';
+import type { Position, Program, Tier, WorkoutFormat } from '@grade/schema';
 
 export interface Notice {
   kind: 'info' | 'error';
@@ -37,12 +39,21 @@ export type Command =
   | { type: 'set-playhead'; t: number }
   | { type: 'set-tier'; segmentId: string; tier: Tier }
   | { type: 'set-label'; segmentId: string; label: string | null }
+  | {
+      type: 'set-workout-fields';
+      segmentId: string;
+      resistanceZone?: number;
+      cadence?: { minRpm: number; maxRpm?: number };
+      position?: Position;
+    }
   | { type: 'split'; segmentId: string; at: number }
   | { type: 'merge'; segmentId: string }
   | { type: 'delete-segment'; segmentId: string }
   | { type: 'move-boundary'; index: number; to: number }
   | { type: 'intervals'; from: number; onSec: number; offSec: number; label?: string }
   | { type: 'rename-program'; name: string }
+  | { type: 'set-program-tags'; tags: string[] }
+  | { type: 'set-workout-format'; workoutFormat?: WorkoutFormat }
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'dismiss-notice' };
@@ -104,8 +115,26 @@ export function reduce(s: EditorState, c: Command, env: Env): EditorState {
         return { ...s, playhead: Math.max(c.t, 0) };
       case 'set-tier':
         return edit(setTier(program, c.segmentId, c.tier));
-      case 'set-label':
-        return edit(setLabel(program, c.segmentId, c.label));
+      case 'set-label': {
+        const labeled = setLabel(program, c.segmentId, c.label);
+        const segment = labeled.segments.find((candidate) => candidate.id === c.segmentId)!;
+        const recognized = recognizeWorkoutTitle(segment.label);
+        return edit(
+          setWorkoutFields(labeled, c.segmentId, {
+            resistanceZone: segment.resistanceZone ?? recognized.resistanceZone,
+            cadence: segment.cadence ?? recognized.cadence,
+            position: segment.position ?? recognized.position,
+          }),
+        );
+      }
+      case 'set-workout-fields':
+        return edit(
+          setWorkoutFields(program, c.segmentId, {
+            resistanceZone: c.resistanceZone,
+            cadence: c.cadence,
+            position: c.position,
+          }),
+        );
       case 'split':
         return structural(splitSegment(program, c.segmentId, c.at, opts));
       case 'merge':
@@ -118,6 +147,10 @@ export function reduce(s: EditorState, c: Command, env: Env): EditorState {
         return structural(generateIntervals(program, c.from, c.onSec, c.offSec, c.label, opts));
       case 'rename-program':
         return edit({ ...program, name: c.name.trim() || program.name }, {});
+      case 'set-program-tags':
+        return edit({ ...program, tags: c.tags });
+      case 'set-workout-format':
+        return edit({ ...program, workoutFormat: c.workoutFormat });
       case 'undo': {
         const history = undo(s.history);
         return {

@@ -1,7 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { MIN_SEGMENT_SEC, segmentTitle } from '@grade/core';
-  import type { Analysis, Program, Track } from '@grade/schema';
+  import {
+    MIN_SEGMENT_SEC,
+    WORKOUT_FORMATS,
+    addProgramTag,
+    removeProgramTag,
+    segmentTitle,
+    workoutFields,
+  } from '@grade/core';
+  import type { Analysis, Position, Program, Track, WorkoutFormat } from '@grade/schema';
   import { exportProgram } from '../app/programFiles';
   import type { Services } from '../app/services';
   import { hrefs } from '../app/router';
@@ -33,6 +40,7 @@
   const ed = $derived(store.state);
   const selected = $derived(program.segments.find((s) => s.id === ed.selectedSegmentId));
   const selectedIndex = $derived(program.segments.findIndex((s) => s.id === ed.selectedSegmentId));
+  const selectedWorkout = $derived(selected ? workoutFields(selected) : {});
   /** Energy in crop-relative time. */
   const energy = $derived(
     analysis.energy
@@ -45,6 +53,7 @@
   let audioReady = $state(false);
   let audioError = $state('');
   let titleMenuOpen = $state(false);
+  let tagInput = $state('');
   let off: (() => void)[] = [];
 
   onMount(() => {
@@ -147,6 +156,39 @@
     services.download(file.filename, file.text);
   }
 
+  function addTag() {
+    const next = addProgramTag(program, tagInput);
+    if (next !== program) store.dispatch({ type: 'set-program-tags', tags: next.tags ?? [] });
+    tagInput = '';
+  }
+
+  function numberValue(input: HTMLInputElement): number | undefined {
+    if (input.value === '') return undefined;
+    const value = Number(input.value);
+    return Number.isInteger(value) ? value : undefined;
+  }
+
+  function updateCadence(part: 'min' | 'max', value: number | undefined) {
+    if (!selected) return;
+    const current = selectedWorkout.cadence;
+    const minRpm = part === 'min' ? value : current?.minRpm;
+    const maxRpm = part === 'max' ? value : current?.maxRpm;
+    const cadence =
+      minRpm !== undefined &&
+      minRpm >= 1 &&
+      minRpm <= 250 &&
+      (maxRpm === undefined || (maxRpm >= minRpm && maxRpm <= 250))
+        ? { minRpm, ...(maxRpm === undefined ? {} : { maxRpm }) }
+        : undefined;
+    store.dispatch({
+      type: 'set-workout-fields',
+      segmentId: selected.id,
+      resistanceZone: selected.resistanceZone,
+      position: selected.position,
+      cadence,
+    });
+  }
+
   const splitTarget = $derived(
     program.segments.find((segment) => ed.playhead >= segment.start && ed.playhead < segment.end),
   );
@@ -200,6 +242,58 @@
       Start class
     </a>
   </div>
+
+  <section class="program-workout" aria-label="Program workout classification">
+    <label>
+      <span class="muted">Workout format</span>
+      <select
+        aria-label="Workout format"
+        value={program.workoutFormat ?? ''}
+        onchange={(event) =>
+          store.dispatch({
+            type: 'set-workout-format',
+            workoutFormat:
+              ((event.currentTarget as HTMLSelectElement).value as WorkoutFormat) || undefined,
+          })}
+      >
+        <option value="">Not set</option>
+        {#each WORKOUT_FORMATS as format (format.value)}
+          <option value={format.value}>{format.label}</option>
+        {/each}
+      </select>
+    </label>
+    <form
+      class="tag-form"
+      onsubmit={(event) => {
+        event.preventDefault();
+        addTag();
+      }}
+    >
+      <label>
+        <span class="muted">Program tags</span>
+        <input bind:value={tagInput} aria-label="Add tag" placeholder="Add tag" />
+      </label>
+      <button type="submit" disabled={!tagInput.trim()}>Add tag</button>
+    </form>
+    {#if (program.tags ?? []).length > 0}
+      <div class="tags" aria-label="Program tags">
+        {#each program.tags ?? [] as tag (tag)}
+          <span class="tag">
+            {tag}
+            <button
+              type="button"
+              aria-label={`Remove tag ${tag}`}
+              onclick={() =>
+                store.dispatch({
+                  type: 'set-program-tags',
+                  tags: removeProgramTag(program, tag).tags ?? [],
+                })}>×</button
+            >
+          </span>
+        {/each}
+      </div>
+    {/if}
+  </section>
 
   {#if store.saveStatus === 'error'}
     <div class="banner error" role="alert">{store.saveError}</div>
@@ -331,6 +425,71 @@
           Delete section
         </button>
       </div>
+      <div class="workout-fields" aria-label="Section workout fields">
+        <label>
+          <span class="muted">Resistance</span>
+          <select
+            aria-label="Resistance zone"
+            value={selectedWorkout.resistanceZone ?? ''}
+            onchange={(event) => {
+              const value = (event.currentTarget as HTMLSelectElement).value;
+              store.dispatch({
+                type: 'set-workout-fields',
+                segmentId: selected.id,
+                resistanceZone: value ? Number(value) : undefined,
+                cadence: selected.cadence,
+                position: selected.position,
+              });
+            }}
+          >
+            <option value="">Not set</option>
+            {#each [1, 2, 3, 4, 5] as zone (zone)}<option value={zone}>Z{zone}</option>{/each}
+          </select>
+        </label>
+        <label>
+          <span class="muted">RPM target / min</span>
+          <input
+            type="number"
+            min="1"
+            max="250"
+            aria-label="Cadence minimum RPM"
+            value={selectedWorkout.cadence?.minRpm ?? ''}
+            onchange={(event) => updateCadence('min', numberValue(event.currentTarget))}
+          />
+        </label>
+        <label>
+          <span class="muted">RPM max (optional)</span>
+          <input
+            type="number"
+            min={selectedWorkout.cadence?.minRpm ?? 1}
+            max="250"
+            aria-label="Cadence maximum RPM"
+            value={selectedWorkout.cadence?.maxRpm ?? ''}
+            onchange={(event) => updateCadence('max', numberValue(event.currentTarget))}
+          />
+        </label>
+        <label>
+          <span class="muted">Position</span>
+          <select
+            aria-label="Position"
+            value={selectedWorkout.position ?? ''}
+            onchange={(event) =>
+              store.dispatch({
+                type: 'set-workout-fields',
+                segmentId: selected.id,
+                resistanceZone: selected.resistanceZone,
+                cadence: selected.cadence,
+                position:
+                  ((event.currentTarget as HTMLSelectElement).value as Position) || undefined,
+              })}
+          >
+            <option value="">Not set</option>
+            <option value="seated">Seated</option>
+            <option value="standing">Standing</option>
+            <option value="mixed">Mixed</option>
+          </select>
+        </label>
+      </div>
     </section>
   {/if}
 
@@ -356,6 +515,52 @@
   label.grow {
     display: flex;
     flex-direction: column;
+  }
+  .program-workout {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 8px 14px;
+    margin: 10px 0 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .program-workout label,
+  .workout-fields label {
+    display: flex;
+    flex-direction: column;
+  }
+  .tag-form,
+  .tags {
+    display: flex;
+    align-items: end;
+    gap: 6px;
+  }
+  .tags {
+    flex-basis: 100%;
+    flex-wrap: wrap;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 4px 2px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+    font-size: 0.8rem;
+  }
+  .tag button {
+    min-height: 22px;
+    padding: 0 5px;
+    border: 0;
+    background: transparent;
+  }
+  .workout-fields {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(110px, 1fr));
+    gap: 10px;
+    margin: 12px 0;
   }
   .transport {
     margin: 22px 0 16px;
@@ -416,6 +621,9 @@
     }
     .transport .grow {
       flex-basis: 100%;
+    }
+    .workout-fields {
+      grid-template-columns: 1fr 1fr;
     }
   }
 </style>

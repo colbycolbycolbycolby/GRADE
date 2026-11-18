@@ -36,6 +36,29 @@ describe('Storage', () => {
     expect((await s.listPrograms()).map((p) => p.id)).toEqual(['new', 'mid', 'old']);
   });
 
+  test('workout metadata is available after reopening the planner-facing catalog', async () => {
+    const name = fresh();
+    const first = new Storage(new GradeDb(name));
+    const program = makeProgram();
+    program.tags = ['endurance'];
+    program.workoutFormat = 'endurance';
+    program.segments[0] = { ...program.segments[0]!, label: 'Z2 80 Seated' };
+    await first.saveProgram(program);
+    first.db.close();
+    const reopened = new Storage(new GradeDb(name));
+    const metadata = (await reopened.listProgramWorkoutMetadata())[0]!;
+    expect(metadata).toMatchObject({
+      programId: 'p1',
+      workoutFormat: 'endurance',
+      tags: ['endurance'],
+    });
+    expect(metadata.segments[0]).toMatchObject({
+      resistanceZone: 2,
+      cadence: { minRpm: 80 },
+      position: 'seated',
+    });
+  });
+
   test('keeps one analysis per track and never replaces a newer version', async () => {
     const s = new Storage(new GradeDb(fresh()));
     await s.saveAnalysis({ ...makeAnalysis(), version: 2 });

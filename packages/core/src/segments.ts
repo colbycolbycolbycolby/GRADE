@@ -133,3 +133,14 @@ export function setLabel(program: Program, segmentId: string, label: string | nu
   segments[i] = { ...segments[i]!, label: trimmed === '' ? null : trimmed };
   return { ...program, segments };
 }
+
+export function setWorkoutFields(
+  program: Program,
+  segmentId: string,
+  fields: Pick<Segment, 'resistanceZone' | 'cadence' | 'position'>,
+): Program {
+  const i = indexOfSegment(program, segmentId);
+  const segments = [...program.segments];
+  segments[i] = { ...segments[i]!, ...fields };
+  return { ...program, segments };
+}

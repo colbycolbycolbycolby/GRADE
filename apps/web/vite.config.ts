@@ -41,7 +41,7 @@ export default defineConfig({
       }),
   ],
   // Send API calls to the local server while developing: `uv run uvicorn api.app:create_app --factory`.
-  server: { proxy: { '/api': 'http://127.0.0.1:8000' } },
+  server: { proxy: { '/api': process.env.GRADE_API_PROXY ?? 'http://127.0.0.1:8000' } },
   // Svelte components must resolve to the browser build in tests.
   resolve: process.env.VITEST ? { conditions: ['browser'] } : undefined,
   test: { environment: 'node', setupFiles: ['./src/testing/setup.ts'] },

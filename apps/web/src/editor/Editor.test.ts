@@ -193,6 +193,49 @@ describe('Editor', () => {
     await until(saved, (x) => x?.name === 'Tuesday Hills');
   });
 
+  test('program tags normalize, deduplicate, remove, and persist with workout format', async () => {
+    const root = await open();
+    await setValue(byLabel<HTMLInputElement>(root, 'Add tag'), ' 100 RPM   Sprint ', 'input');
+    await click(button(root, 'Add tag'));
+    await setValue(byLabel<HTMLInputElement>(root, 'Add tag'), '100 rpm sprint', 'input');
+    await click(button(root, 'Add tag'));
+    await setValue(byLabel<HTMLSelectElement>(root, 'Workout format'), 'sprint');
+    let program = await until(saved, (value) => value?.workoutFormat === 'sprint');
+    expect(program!.tags).toEqual(['100_rpm_sprint']);
+    await click(byLabel(root, 'Remove tag 100_rpm_sprint'));
+    program = await until(saved, (value) => value?.tags?.length === 0);
+    expect(program!.tags).toEqual([]);
+  });
+
+  test('recognized title fields are shown and manual corrections persist without changing title', async () => {
+    const program = makeProgram();
+    program.segments[0] = { ...program.segments[0]!, label: 'Z4 70-80 Standing' };
+    const root = await open(program);
+    expect(byLabel<HTMLSelectElement>(root, 'Resistance zone').value).toBe('4');
+    expect(byLabel<HTMLInputElement>(root, 'Cadence minimum RPM').value).toBe('70');
+    expect(byLabel<HTMLInputElement>(root, 'Cadence maximum RPM').value).toBe('80');
+    expect(byLabel<HTMLSelectElement>(root, 'Position').value).toBe('standing');
+    await setValue(byLabel<HTMLSelectElement>(root, 'Resistance zone'), '3');
+    const savedProgram = await until(saved, (value) => value?.segments[0]?.resistanceZone === 3);
+    expect(savedProgram!.segments[0]!.label).toBe('Z4 70-80 Standing');
+    expect(savedProgram!.segments[0]!.start).toBe(0);
+    expect(savedProgram!.segments[0]!.end).toBe(30);
+  });
+
+  test('editing a shorthand title immediately prefills empty workout fields', async () => {
+    const root = await open();
+    await setValue(byLabel<HTMLInputElement>(root, 'Section name'), 'Z3 80 Seated');
+    expect(byLabel<HTMLSelectElement>(root, 'Resistance zone').value).toBe('3');
+    expect(byLabel<HTMLInputElement>(root, 'Cadence minimum RPM').value).toBe('80');
+    expect(byLabel<HTMLSelectElement>(root, 'Position').value).toBe('seated');
+    const savedProgram = await until(saved, (value) => value?.segments[0]?.resistanceZone === 3);
+    expect(savedProgram!.segments[0]).toMatchObject({
+      label: 'Z3 80 Seated',
+      cadence: { minRpm: 80 },
+      position: 'seated',
+    });
+  });
+
   test('export hands a valid program file to the download service', async () => {
     const root = await open();
     await click(button(root, 'Export'));

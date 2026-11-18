@@ -23,6 +23,31 @@ describe('schema', () => {
       true,
     );
   });
+  test('legacy programs remain valid and structured cadence ranges are validated', () => {
+    expect(ProgramFileSchema.safeParse({ schemaVersion: SCHEMA_VERSION, program }).success).toBe(
+      true,
+    );
+    const structured = {
+      ...program,
+      tags: ['rolling_hills'],
+      workoutFormat: 'hills_climb',
+      segments: [
+        {
+          ...program.segments[0],
+          resistanceZone: 4,
+          cadence: { minRpm: 70, maxRpm: 80 },
+          position: 'standing',
+        },
+      ],
+    };
+    expect(
+      ProgramFileSchema.safeParse({ schemaVersion: SCHEMA_VERSION, program: structured }).success,
+    ).toBe(true);
+    structured.segments[0]!.cadence = { minRpm: 80, maxRpm: 70 };
+    expect(
+      ProgramFileSchema.safeParse({ schemaVersion: SCHEMA_VERSION, program: structured }).success,
+    ).toBe(false);
+  });
   test('rejects wrong schema version and bad tier', () => {
     expect(ProgramFileSchema.safeParse({ schemaVersion: 99, program }).success).toBe(false);
     const bad = { ...program, segments: [{ ...program.segments[0], tier: 'extreme' }] };
