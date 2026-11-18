@@ -13,7 +13,7 @@ export interface PlanSong {
 
 export interface PlanDeps {
   /** Makes a backend. A plan passes the same `context` to each, so one gesture unlocks them all. */
-  createBackend: (context?: AudioContext) => PlaybackBackend;
+  createBackend: (track: Track, context?: AudioContext) => PlaybackBackend;
   /** Makes the shared audio context. Leave it out for backends that need none. */
   createContext?: () => AudioContext;
   audioUrl: (trackId: string) => string;
@@ -159,7 +159,7 @@ export class PlanPlayer {
     const song = this.songs[i]!;
     const schedule = buildSchedule(song.program);
     const backend = new OffsetBackend(
-      this.deps.createBackend(this.sharedContext()),
+      this.deps.createBackend(song.track, this.sharedContext(song.track)),
       song.analysis.cropStart,
     );
     const runner = new ClassRunner(backend, schedule, {
@@ -184,7 +184,11 @@ export class PlanPlayer {
     // A load error reaches the user through `error`, and `start` rethrows it.
     // The error text is written for the user, so `start` can show it as it is.
     slot.ready = backend
-      .load({ id: song.track.id, url: this.deps.audioUrl(song.track.id) })
+      .load({
+        id: song.track.id,
+        url: this.deps.audioUrl(song.track.id),
+        youtubeId: song.track.source === 'youtube' ? song.track.id.replace(/^yt:/, '') : undefined,
+      })
       .catch((err: unknown) => {
         const message = loadMessage(song, err);
         if (!this.disposed) this.emit('error', { message });
@@ -195,8 +199,8 @@ export class PlanPlayer {
     return slot;
   }
 
-  private sharedContext(): AudioContext | undefined {
-    if (!this.deps.createContext) return undefined;
+  private sharedContext(track: Track): AudioContext | undefined {
+    if (track.source === 'youtube' || !this.deps.createContext) return undefined;
     this.context ??= this.deps.createContext();
     return this.context;
   }

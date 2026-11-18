@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { expect, test, vi } from 'vitest';
 import { YouTubeEmbedBackend, type YTApi, type YTPlayerOptions } from './youtube';
 
@@ -71,4 +72,12 @@ test('state change "ended" notifies listeners', async () => {
 test('load needs a youtube id', async () => {
   const backend = new YouTubeEmbedBackend('x', async () => fakeApi().api);
   await expect(backend.load({ id: 'file:x', url: '/a' })).rejects.toThrow();
+});
+
+test('owns and removes an offscreen host when none is supplied', () => {
+  const before = document.body.children.length;
+  const backend = new YouTubeEmbedBackend(undefined, async () => fakeApi().api);
+  expect(document.body.children.length).toBe(before + 1);
+  backend.dispose();
+  expect(document.body.children.length).toBe(before);
 });

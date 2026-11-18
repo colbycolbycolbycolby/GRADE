@@ -1,5 +1,5 @@
 import { programWorkoutMetadata } from '@grade/core';
-import type { Program, WorkoutFormat } from '@grade/schema';
+import type { Program, WorkoutFormat, WorkoutInterpretation } from '@grade/schema';
 import { classSeconds } from './programFiles';
 
 export type WorkoutRole = 'warmup' | 'climb' | 'intervals' | 'sprint' | 'endurance' | 'cooldown';
@@ -13,7 +13,8 @@ export interface PlannedProgram {
 }
 
 export interface WorkoutPlanProposal {
-  mode: 'deterministic';
+  mode: 'deterministic' | 'openai';
+  model: string | null;
   requestedMinutes: number | null;
   actualMinutes: number;
   entries: PlannedProgram[];
@@ -27,6 +28,9 @@ interface Request {
   roles: WorkoutRole[];
   hard: boolean;
   z4: boolean;
+  programCount: number | null;
+  artistPreferences: string[];
+  artistExclusions: string[];
 }
 
 interface Profile {
@@ -86,6 +90,24 @@ export function parseWorkoutRequest(text: string): Request {
     roles,
     hard: /\b(?:hard|intense|high intensity)\b/.test(lower),
     z4: /\bz\s*4\b/.test(lower),
+    programCount: Number(lower.match(/\b(\d+)\s+(?:programs?|songs?)\b/)?.[1]) || null,
+    artistPreferences: [],
+    artistExclusions: [],
+  };
+}
+
+export function deterministicWorkoutInterpretation(text: string): WorkoutInterpretation {
+  const request = parseWorkoutRequest(text);
+  return {
+    mode: 'deterministic',
+    model: null,
+    durationMinutes: request.minutes,
+    sequence: request.roles,
+    intensity: request.hard ? 'hard' : null,
+    resistanceZones: request.z4 ? [4] : [],
+    programCount: request.programCount,
+    artistPreferences: [],
+    artistExclusions: [],
   };
 }
 
@@ -162,13 +184,39 @@ function sequenceRoles(requested: WorkoutRole[], count: number): WorkoutRole[] {
   return ordered.slice(0, count);
 }
 
-export function planWorkout(programs: Program[], text: string): WorkoutPlanProposal {
-  const request = parseWorkoutRequest(text);
-  const eligible = programs.filter(isInstructorProgram).map(profile);
+export function planWorkout(
+  programs: Program[],
+  text: string,
+  interpretation: WorkoutInterpretation = deterministicWorkoutInterpretation(text),
+): WorkoutPlanProposal {
+  const local = parseWorkoutRequest(text);
+  const request: Request = {
+    minutes: interpretation.durationMinutes,
+    roles: interpretation.sequence,
+    hard: interpretation.intensity === 'hard',
+    z4: interpretation.resistanceZones.includes(4),
+    programCount: interpretation.programCount,
+    artistPreferences: interpretation.artistPreferences,
+    artistExclusions: interpretation.artistExclusions,
+  };
+  // The model is additive only: explicit constraints recognized locally cannot be lost.
+  if (request.minutes === null) request.minutes = local.minutes;
+  if (!request.roles.length) request.roles = local.roles;
+  request.hard ||= local.hard;
+  request.z4 ||= local.z4;
+  request.programCount ??= local.programCount;
+  const excludedArtists = request.artistExclusions.map((artist) => artist.toLowerCase());
+  const eligible = programs
+    .filter(isInstructorProgram)
+    .filter(
+      (program) => !excludedArtists.some((artist) => program.name.toLowerCase().includes(artist)),
+    )
+    .map(profile);
   const shortfalls: string[] = [];
   if (!eligible.length) {
     return {
       mode: 'deterministic',
+      model: null,
       requestedMinutes: request.minutes,
       actualMinutes: 0,
       entries: [],
@@ -180,9 +228,10 @@ export function planWorkout(programs: Program[], text: string): WorkoutPlanPropo
   const average = eligible.reduce((sum, item) => sum + item.duration, 0) / eligible.length;
   const requestedCount = Math.max(
     request.roles.length,
-    request.minutes
-      ? Math.max(1, Math.round((request.minutes * 60) / average))
-      : Math.min(eligible.length, 6),
+    request.programCount ??
+      (request.minutes
+        ? Math.max(1, Math.round((request.minutes * 60) / average))
+        : Math.min(eligible.length, 6)),
   );
   const count = Math.min(eligible.length, requestedCount);
   const roles = sequenceRoles(request.roles.length ? request.roles : ['endurance'], count);
@@ -193,12 +242,20 @@ export function planWorkout(programs: Program[], text: string): WorkoutPlanPropo
       ? request.minutes * 60 - chosen.reduce((sum, entry) => sum + entry.item.duration, 0)
       : average;
     available.sort((a, b) => {
+      const preference = (item: Profile) =>
+        request.artistPreferences.some((artist) =>
+          item.program.name.toLowerCase().includes(artist.toLowerCase()),
+        )
+          ? 5
+          : 0;
       const aScore =
         affinity(a, role, request) -
-        Math.abs(a.duration - targetRemaining / Math.max(1, roles.length - chosen.length)) / 180;
+        Math.abs(a.duration - targetRemaining / Math.max(1, roles.length - chosen.length)) / 180 +
+        preference(a);
       const bScore =
         affinity(b, role, request) -
-        Math.abs(b.duration - targetRemaining / Math.max(1, roles.length - chosen.length)) / 180;
+        Math.abs(b.duration - targetRemaining / Math.max(1, roles.length - chosen.length)) / 180 +
+        preference(b);
       return bScore - aScore || a.program.id.localeCompare(b.program.id);
     });
     const item = available.shift();
@@ -220,6 +277,17 @@ export function planWorkout(programs: Program[], text: string): WorkoutPlanPropo
     shortfalls.push(
       `Requested ${request.minutes} minutes; whole existing Programs total ${(seconds / 60).toFixed(1)} minutes.`,
     );
+  if (
+    request.artistPreferences.length &&
+    !chosen.some((entry) =>
+      request.artistPreferences.some((artist) =>
+        entry.item.program.name.toLowerCase().includes(artist.toLowerCase()),
+      ),
+    )
+  )
+    shortfalls.push(
+      `No eligible Program matched the artist preference: ${request.artistPreferences.join(', ')}.`,
+    );
   const entries = chosen.map(({ item, role }) => ({
     programId: item.program.id,
     name: item.program.name,
@@ -228,7 +296,8 @@ export function planWorkout(programs: Program[], text: string): WorkoutPlanPropo
     explanation: `${role} match using its saved format/tags and ${Math.round(item.z4Ratio * 100)}% Z4, ${Math.round(item.hardRatio * 100)}% hard/all-out, ${Math.round(item.standingRatio * 100)}% standing section time.`,
   }));
   return {
-    mode: 'deterministic',
+    mode: interpretation.mode,
+    model: interpretation.mode === 'openai' ? interpretation.model : null,
     requestedMinutes: request.minutes,
     actualMinutes: Math.round((seconds / 60) * 10) / 10,
     entries,

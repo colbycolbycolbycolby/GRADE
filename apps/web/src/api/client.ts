@@ -4,11 +4,13 @@ import {
   IngestResponseSchema,
   JobStatusSchema,
   PlaylistProposalSchema,
+  WorkoutInterpretationSchema,
   TrackSchema,
   type Analysis,
   type IngestResponse,
   type JobStatus,
   type PlaylistProposal,
+  type WorkoutInterpretation,
   type Track,
 } from '@grade/schema';
 
@@ -93,6 +95,14 @@ export class ApiClient {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ request, previous: previous ?? null }),
+    });
+  }
+
+  interpretWorkout(request: string): Promise<WorkoutInterpretation> {
+    return this.request('/api/workouts/interpret', WorkoutInterpretationSchema, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ request }),
     });
   }
 

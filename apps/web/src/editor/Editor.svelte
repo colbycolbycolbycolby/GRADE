@@ -57,7 +57,7 @@
   let off: (() => void)[] = [];
 
   onMount(() => {
-    const inner = new OffsetBackend(services.createBackend(), analysis.cropStart);
+    const inner = new OffsetBackend(services.createBackend(track), analysis.cropStart);
     backend = inner;
     off.push(
       inner.onPosition((t) => {
@@ -66,7 +66,11 @@
       inner.onEnded(() => (playing = false)),
     );
     inner
-      .load({ id: track.id, url: services.api.audioUrl(track.id) })
+      .load({
+        id: track.id,
+        url: services.api.audioUrl(track.id),
+        youtubeId: track.source === 'youtube' ? track.id.replace(/^yt:/, '') : undefined,
+      })
       .then(() => (audioReady = true))
       .catch(() => (audioError = 'The audio could not load. You can still edit.'));
     window.addEventListener('keydown', onEditorKeydown);

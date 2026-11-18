@@ -164,6 +164,29 @@ export const PlaylistProposalSchema = z.object({
 });
 export type PlaylistProposal = z.infer<typeof PlaylistProposalSchema>;
 
+export const WorkoutRoleSchema = z.enum([
+  'warmup',
+  'climb',
+  'intervals',
+  'sprint',
+  'endurance',
+  'cooldown',
+]);
+export type WorkoutRole = z.infer<typeof WorkoutRoleSchema>;
+
+export const WorkoutInterpretationSchema = z.object({
+  mode: z.enum(['deterministic', 'openai']),
+  model: z.string().nullable(),
+  durationMinutes: z.number().positive().max(600).nullable(),
+  sequence: z.array(WorkoutRoleSchema).max(100),
+  intensity: z.enum(['easy', 'moderate', 'hard']).nullable(),
+  resistanceZones: z.array(z.number().int().min(1).max(5)).max(5),
+  programCount: z.number().int().positive().max(100).nullable(),
+  artistPreferences: z.array(z.string().min(1)).max(20),
+  artistExclusions: z.array(z.string().min(1)).max(20),
+});
+export type WorkoutInterpretation = z.infer<typeof WorkoutInterpretationSchema>;
+
 /** File format for exported programs. */
 export const ProgramFileSchema = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),

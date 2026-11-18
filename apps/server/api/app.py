@@ -33,9 +33,13 @@ from ingest.files import hash_file
 from planner import (
     CatalogRepository,
     OpenAIRequestInterpreter,
+    OpenAIWorkoutInterpreter,
     PlaylistAgent,
     PlaylistProposal,
     RuleBasedRequestInterpreter,
+    RuleBasedWorkoutInterpreter,
+    WorkoutInterpretation,
+    WorkoutRequestInterpreter,
 )
 from planner.interpreter import RequestInterpreter
 
@@ -123,12 +127,17 @@ class PlaylistPlanBody(BaseModel):
     previous: PlaylistProposal | None = None
 
 
+class WorkoutInterpretBody(BaseModel):
+    request: str
+
+
 def create_app(
     settings: Settings | None = None,
     ingest: AudioIngest | None = None,
     analyzer: Analyzer | None = None,
     transcoder: Transcoder | None = None,
     playlist_interpreter: RequestInterpreter | None = None,
+    workout_interpreter: WorkoutRequestInterpreter | None = None,
 ) -> FastAPI:
     cfg = settings or Settings.from_env()
     store = Store(cfg.data_dir)
@@ -150,6 +159,11 @@ def create_app(
         else RuleBasedRequestInterpreter()
     )
     playlist_agent = PlaylistAgent(CatalogRepository(cfg.data_dir), interpreter)
+    workout_request_interpreter = workout_interpreter or (
+        OpenAIWorkoutInterpreter(cfg.openai_api_key, cfg.openai_model)
+        if cfg.openai_api_key
+        else RuleBasedWorkoutInterpreter()
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> Any:
@@ -257,6 +271,12 @@ def create_app(
         if not body.request.strip():
             raise ApiError("bad_request", "The playlist request cannot be empty.")
         return playlist_agent.plan(body.request, body.previous)
+
+    @app.post("/api/workouts/interpret", dependencies=guard, response_model=WorkoutInterpretation)
+    def interpret_workout(body: WorkoutInterpretBody) -> WorkoutInterpretation:
+        if not body.request.strip():
+            raise ApiError("bad_request", "The workout request cannot be empty.")
+        return workout_request_interpreter.interpret(body.request)
 
     # Last, so that no web file can shadow an `/api` route.
     if cfg.web_dir is not None and (cfg.web_dir / "index.html").is_file():

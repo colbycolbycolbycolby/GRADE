@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { makeAnalysis, makeProgram, track } from '../testing/fixtures';
 import { PlanPlayer, PRELOAD_LEAD_SEC, type PlanDeps, type PlanSong } from './plan';
 import { FakeBackend, FakeClock } from './testkit';
@@ -9,7 +9,7 @@ function songs(n: number): PlanSong[] {
   return Array.from({ length: n }, (_, i) => ({
     program: { ...makeProgram(`Song ${i + 1}`), id: `p${i + 1}` },
     analysis: makeAnalysis(),
-    track: { ...track, title: `Track ${i + 1}` },
+    track: { ...track, id: `file:track-${i + 1}`, source: 'file', title: `Track ${i + 1}` },
   }));
 }
 
@@ -19,7 +19,7 @@ function setup(n = 3, over: Partial<PlanDeps> = {}) {
   const loads: string[] = [];
   const contexts: unknown[] = [];
   const deps: PlanDeps = {
-    createBackend: (context) => {
+    createBackend: (_track, context) => {
       contexts.push(context);
       const b = new FakeBackend(clock, true);
       backends.push(b);
@@ -87,6 +87,33 @@ describe('PlanPlayer', () => {
     expect(contexts[0]).toBe(contexts[1]);
     expect(backends[0]!.playing).toBe(false);
     expect(backends[1]!.playing).toBe(true);
+  });
+
+  test('a YouTube song gets its video id and does not create an audio context', async () => {
+    const clock = new FakeClock();
+    const backend = new FakeBackend(clock, false);
+    const load = vi.spyOn(backend, 'load');
+    let contexts = 0;
+    const youtubeSong = songs(1)[0]!;
+    youtubeSong.track = { ...track, id: 'yt:dQw4w9WgXcQ', source: 'youtube' };
+    const player = new PlanPlayer([youtubeSong], {
+      clock,
+      audioUrl: () => '/api/audio',
+      createContext: () => {
+        contexts += 1;
+        return {} as AudioContext;
+      },
+      createBackend: (selected, context) => {
+        expect(selected).toBe(youtubeSong.track);
+        expect(context).toBeUndefined();
+        return backend;
+      },
+    });
+
+    await player.prepare();
+
+    expect(contexts).toBe(0);
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ youtubeId: 'dQw4w9WgXcQ' }));
   });
 
   test('nextSong skips to the next song, and on the last song it ends the class', async () => {

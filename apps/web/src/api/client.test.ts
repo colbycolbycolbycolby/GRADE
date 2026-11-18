@@ -47,6 +47,17 @@ describe('ApiClient', () => {
     });
   });
 
+  test('interprets a workout request through the server contract', async () => {
+    const { fake, api } = client();
+    const result = await api.interpretWorkout('One hard Z4 climb.');
+    expect(result).toMatchObject({ mode: 'deterministic', sequence: ['climb'] });
+    expect(fake.calls[0]).toMatchObject({
+      path: '/api/workouts/interpret',
+      method: 'POST',
+      body: { request: 'One hard Z4 climb.' },
+    });
+  });
+
   test('a server error keeps its code and message', async () => {
     const { fake, api } = client();
     fake.state.failIngest = { status: 400, code: 'unsupported_host', message: 'Only YouTube.' };

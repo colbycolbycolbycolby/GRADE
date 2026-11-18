@@ -5,7 +5,11 @@
   import { describeError } from './errors';
   import { hrefs } from './router';
   import type { Services } from './services';
-  import { planWorkout, type WorkoutPlanProposal } from './workoutPlanner';
+  import {
+    deterministicWorkoutInterpretation,
+    planWorkout,
+    type WorkoutPlanProposal,
+  } from './workoutPlanner';
 
   interface Props {
     services: Services;
@@ -30,8 +34,21 @@
     }
   });
 
-  function generate() {
-    if (request.trim()) proposal = planWorkout(programs, request);
+  async function generate() {
+    if (!request.trim()) return;
+    loading = true;
+    error = '';
+    try {
+      let interpretation;
+      try {
+        interpretation = await services.api.interpretWorkout(request);
+      } catch {
+        interpretation = deterministicWorkoutInterpretation(request);
+      }
+      proposal = planWorkout(programs, request, interpretation);
+    } finally {
+      loading = false;
+    }
   }
   function move(index: number, by: number) {
     if (!proposal) return;
@@ -107,7 +124,10 @@
         </div>
       </div>
       <p class="muted interpretation-mode">
-        Planning: deterministic local workout scoring (no model call) · Library: {proposal.eligibleCount}
+        Planning: {proposal.mode === 'openai'
+          ? `OpenAI interpretation (${proposal.model}) with deterministic Program selection`
+          : 'deterministic local interpretation and workout scoring (no successful model call)'} · Library:
+        {proposal.eligibleCount}
         instructor-authored eligible, {proposal.excludedCount} unprogrammed/AI draft excluded
       </p>
       {#if proposal.shortfalls.length}<div class="banner shortfall">

@@ -64,6 +64,7 @@ export function makeFakeFetch() {
   const state = {
     failIngest: null as null | { status: number; code: string; message: string },
     failJob: null as null | { code: string; message: string },
+    failWorkoutInterpretation: false,
   };
 
   const json = (body: unknown, status = 200) =>
@@ -120,6 +121,21 @@ export function makeFakeFetch() {
           actual_ride_types: { hill: 1 },
           satisfied: true,
         },
+      });
+    }
+    if (method === 'POST' && input === '/api/workouts/interpret') {
+      if (state.failWorkoutInterpretation)
+        return err(503, 'model_unavailable', 'Interpretation unavailable.');
+      return json({
+        mode: 'deterministic',
+        model: null,
+        durationMinutes: null,
+        sequence: ['climb'],
+        intensity: null,
+        resistanceZones: [],
+        programCount: 1,
+        artistPreferences: [],
+        artistExclusions: [],
       });
     }
     const job = /^\/api\/jobs\/([^/]+)$/.exec(input);

@@ -66,11 +66,26 @@ export class YouTubeEmbedBackend implements PlaybackBackend {
   private positionListeners = new Set<(t: number) => void>();
   private endedListeners = new Set<() => void>();
   private poll: ReturnType<typeof setInterval> | null = null;
+  private readonly container: HTMLElement | string;
+  private readonly ownedContainer: HTMLElement | null;
 
   constructor(
-    private readonly container: HTMLElement | string,
+    container?: HTMLElement | string,
     private readonly loadApi: () => Promise<YTApi> = loadYouTubeApi,
-  ) {}
+  ) {
+    if (container === undefined) {
+      const element = document.createElement('div');
+      element.setAttribute('aria-hidden', 'true');
+      element.style.cssText =
+        'position:fixed;width:1px;height:1px;left:-10000px;top:-10000px;overflow:hidden';
+      document.body.append(element);
+      this.container = element;
+      this.ownedContainer = element;
+    } else {
+      this.container = container;
+      this.ownedContainer = null;
+    }
+  }
 
   async load(track: PlaybackTrack): Promise<void> {
     if (!track.youtubeId) throw new Error('YouTubeEmbedBackend needs a youtubeId');
@@ -134,5 +149,6 @@ export class YouTubeEmbedBackend implements PlaybackBackend {
     this.endedListeners.clear();
     this.player?.destroy();
     this.player = null;
+    this.ownedContainer?.remove();
   }
 }

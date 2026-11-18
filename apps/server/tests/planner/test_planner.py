@@ -15,6 +15,7 @@ from planner import (
     PlaylistAgent,
     RuleBasedRequestInterpreter,
 )
+from planner.workout_interpreter import OpenAIWorkoutInterpreter, RuleBasedWorkoutInterpreter
 
 TRACKS = [
     ("yt:AAAAAAAAAAA", "Rihanna - Easy Start", 210.0, 92.0, 0.25, 5),
@@ -372,3 +373,70 @@ def test_api_returns_song_based_playlist_shape(catalog_dir: Path) -> None:
         "explanation",
     }
     assert payload["validation"]["valid_track_ids"] is True
+
+
+def test_openai_workout_interpreter_returns_validated_constraints() -> None:
+    interpreter = OpenAIWorkoutInterpreter("not-a-real-key", "test-model")
+    interpreter._client = SimpleNamespace(  # type: ignore[assignment]
+        responses=SimpleNamespace(
+            create=lambda **_: SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "durationMinutes": 30,
+                        "sequence": ["warmup", "climb", "sprint", "cooldown"],
+                        "intensity": "hard",
+                        "resistanceZones": [4],
+                        "programCount": 4,
+                        "artistPreferences": ["Rihanna"],
+                        "artistExclusions": [],
+                    }
+                )
+            )
+        )
+    )
+
+    result = interpreter.interpret("Hard 30 minute Z4 class")
+
+    assert result.mode == "openai"
+    assert result.model == "test-model"
+    assert result.sequence == ["warmup", "climb", "sprint", "cooldown"]
+
+
+def test_openai_workout_interpreter_falls_back_on_invalid_output() -> None:
+    interpreter = OpenAIWorkoutInterpreter("not-a-real-key")
+    interpreter._client = SimpleNamespace(  # type: ignore[assignment]
+        responses=SimpleNamespace(create=lambda **_: SimpleNamespace(output_text="not json"))
+    )
+
+    result = interpreter.interpret("Hard 20-minute class with two climbs and Z4")
+
+    assert result.mode == "deterministic"
+    assert result.model is None
+    assert result.durationMinutes == 20
+    assert result.sequence == ["climb", "climb"]
+    assert result.resistanceZones == [4]
+
+
+def test_workout_interpretation_api_reports_fallback(catalog_dir: Path) -> None:
+    app = create_app(
+        Settings(data_dir=catalog_dir, web_dir=None),
+        workout_interpreter=RuleBasedWorkoutInterpreter(),
+    )
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/workouts/interpret",
+            json={"request": "20-minute endurance class"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "mode": "deterministic",
+        "model": None,
+        "durationMinutes": 20.0,
+        "sequence": ["endurance"],
+        "intensity": None,
+        "resistanceZones": [],
+        "programCount": None,
+        "artistPreferences": [],
+        "artistExclusions": [],
+    }

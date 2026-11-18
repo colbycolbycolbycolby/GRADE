@@ -7,6 +7,7 @@ __pycache__
 .ruff_cache
 apps/server/data
 .env
+.env.local
 apps/server/tests/fixtures/generated
 
 grade-data-backup-*

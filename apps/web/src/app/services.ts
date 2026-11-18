@@ -2,9 +2,11 @@ import {
   LocalAudioBackend,
   realClock,
   ScreenWakeLock,
+  YouTubeEmbedBackend,
   type Clock,
   type PlaybackBackend,
 } from '../playback';
+import type { Track } from '@grade/schema';
 import { ApiClient } from '../api/client';
 import { Storage } from '../storage/storage';
 
@@ -13,7 +15,7 @@ export interface Services {
   storage: Storage;
   api: ApiClient;
   /** Makes the backend that the editor uses to preview the song. */
-  createBackend: (context?: AudioContext) => PlaybackBackend;
+  createBackend: (track: Track, context?: AudioContext) => PlaybackBackend;
   /** Makes the audio context that all songs of one class plan share. */
   createContext: () => AudioContext;
   createWakeLock: () => ScreenWakeLock;
@@ -40,8 +42,12 @@ export function createServices(): Services {
   return {
     storage: new Storage(),
     api: new ApiClient(),
-    createBackend: (context) =>
-      context ? new LocalAudioBackend(() => context, false) : new LocalAudioBackend(),
+    createBackend: (track, context) =>
+      track.source === 'youtube'
+        ? new YouTubeEmbedBackend()
+        : context
+          ? new LocalAudioBackend(() => context, false)
+          : new LocalAudioBackend(),
     createContext: () => new AudioContext(),
     createWakeLock: () => new ScreenWakeLock(),
     clock: realClock,

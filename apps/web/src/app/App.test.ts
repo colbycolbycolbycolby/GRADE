@@ -284,6 +284,34 @@ describe('App', () => {
       (hash) => /^#\/run\/plan\//.test(hash),
     );
   });
+
+  test('planner reports deterministic fallback when interpretation is unavailable', async () => {
+    const instructorProgram = makeProgram('Fallback hill');
+    instructorProgram.segments[0] = {
+      ...instructorProgram.segments[0]!,
+      label: 'Climb Z4 60 standing',
+    };
+    await services.storage.saveTrack(track);
+    await services.storage.saveAnalysis(makeAnalysis());
+    await services.storage.saveProgram(instructorProgram);
+    services.fake.state.failWorkoutInterpretation = true;
+    const root = await start('#/planner');
+    await setValue(
+      root.querySelector<HTMLTextAreaElement>('textarea')!,
+      'One hard Z4 climb.',
+      'input',
+    );
+    await until(
+      () => root.textContent ?? '',
+      (text) => /Build from my Programs/.test(text),
+    );
+    await click(button(root, 'Build from my Programs'));
+    await until(
+      () => root.textContent ?? '',
+      (text) => /no successful model call/.test(text),
+    );
+    expect(root.textContent).toMatch(/Fallback hill/);
+  });
 });
 
 const inputOf = (root: ParentNode, text: RegExp) =>

@@ -55,4 +55,24 @@ describe('workout planner', () => {
     );
     expect(result.shortfalls.join(' ')).toMatch(/sprint|20 minutes/);
   });
+  test('uses validated model constraints while keeping selection catalog-grounded', () => {
+    const source = [
+      program('hill', 'Artist A - Hill', 'climb Z4 60 standing'),
+      program('sprint', 'Artist B - Sprint', 'sprint Z5 120 seated'),
+    ];
+    const result = planWorkout(source, 'Make it spicy', {
+      mode: 'openai',
+      model: 'test-model',
+      durationMinutes: 10,
+      sequence: ['sprint', 'climb'],
+      intensity: 'hard',
+      resistanceZones: [4],
+      programCount: 2,
+      artistPreferences: ['Artist B'],
+      artistExclusions: [],
+    });
+    expect(result.mode).toBe('openai');
+    expect(result.model).toBe('test-model');
+    expect(result.entries.map((entry) => entry.programId)).toEqual(['sprint', 'hill']);
+  });
 });
