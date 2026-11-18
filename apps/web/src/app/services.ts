@@ -2,7 +2,6 @@ import {
   LocalAudioBackend,
   realClock,
   ScreenWakeLock,
-  YouTubeEmbedBackend,
   type Clock,
   type PlaybackBackend,
 } from '../playback';
@@ -42,12 +41,12 @@ export function createServices(): Services {
   return {
     storage: new Storage(),
     api: new ApiClient(),
-    createBackend: (track, context) =>
-      track.source === 'youtube'
-        ? new YouTubeEmbedBackend()
-        : context
-          ? new LocalAudioBackend(() => context, false)
-          : new LocalAudioBackend(),
+    // Every successfully ingested track has a canonical play.m4a on this server, including
+    // tracks whose original source was YouTube. `source` describes provenance; it is not a
+    // playback-backend selector. Using the hidden YouTube iframe here bypassed the local catalog
+    // and made Safari playback depend on iframe autoplay/network behavior.
+    createBackend: (_track, context) =>
+      context ? new LocalAudioBackend(() => context, false) : new LocalAudioBackend(),
     createContext: () => new AudioContext(),
     createWakeLock: () => new ScreenWakeLock(),
     clock: realClock,
