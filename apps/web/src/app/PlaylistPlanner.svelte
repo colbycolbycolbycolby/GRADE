@@ -1,99 +1,66 @@
 <script lang="ts">
-  import { programFromAnalysis } from '@grade/core';
-  import type { ClassPlan, PlaylistEntry, PlaylistProposal, Program } from '@grade/schema';
+  import { onMount } from 'svelte';
+  import type { ClassPlan, Program } from '@grade/schema';
   import { formatTime } from '../editor/geometry';
   import { describeError } from './errors';
   import { hrefs } from './router';
   import type { Services } from './services';
+  import { planWorkout, type WorkoutPlanProposal } from './workoutPlanner';
 
   interface Props {
     services: Services;
     onsaved: (id: string) => void;
   }
   let { services, onsaved }: Props = $props();
-
   let request = $state('');
-  let proposal = $state.raw<PlaylistProposal | null>(null);
+  let programs: Program[] = $state.raw([]);
+  let proposal = $state.raw<WorkoutPlanProposal | null>(null);
   let error = $state('');
-  let working = $state(false);
+  let loading = $state(true);
   let saving = $state(false);
-  let planName = $state('AI playlist');
+  let planName = $state('Workout-aware class');
 
-  function normalized(current: PlaylistProposal): PlaylistProposal {
-    return {
-      ...current,
-      entries: current.entries.map((entry, index) => ({ ...entry, position: index + 1 })),
-    };
-  }
-
-  async function generate(text = request) {
-    if (!text.trim()) return;
-    working = true;
-    error = '';
+  onMount(async () => {
     try {
-      proposal = await services.api.planPlaylist(text, proposal ? normalized(proposal) : undefined);
-      request = '';
+      programs = await services.storage.listPrograms();
     } catch (err) {
       error = describeError(err);
     } finally {
-      working = false;
+      loading = false;
     }
-  }
+  });
 
+  function generate() {
+    if (request.trim()) proposal = planWorkout(programs, request);
+  }
   function move(index: number, by: number) {
     if (!proposal) return;
     const to = index + by;
     if (to < 0 || to >= proposal.entries.length) return;
     const entries = [...proposal.entries];
     [entries[index], entries[to]] = [entries[to]!, entries[index]!];
-    proposal = normalized({ ...proposal, entries });
+    proposal = { ...proposal, entries };
   }
-
   function remove(index: number) {
-    if (!proposal) return;
-    proposal = normalized({ ...proposal, entries: proposal.entries.filter((_, i) => i !== index) });
+    if (proposal)
+      proposal = { ...proposal, entries: proposal.entries.filter((_, i) => i !== index) };
   }
-
-  async function replace(index: number) {
-    await generate(`Replace the ${index + 1} playlist entry.`);
-  }
-
-  async function programFor(entry: PlaylistEntry, existing: Program[]): Promise<Program> {
-    const [track, analysis] = await Promise.all([
-      services.api.getTrack(entry.track_id),
-      services.api.getAnalysis(entry.track_id),
-    ]);
-    await services.storage.saveTrack(track);
-    await services.storage.saveAnalysis(analysis);
-    const reusable = existing.find(
-      (program) =>
-        program.trackId === entry.track_id && program.analysisVersion === analysis.version,
-    );
-    if (reusable) return reusable;
-    const program = programFromAnalysis(
-      analysis,
-      { name: `${track.title} — AI draft`, now: services.now() },
-      { newId: services.newId },
-    );
-    await services.storage.saveProgram(program);
-    existing.push(program);
-    return program;
-  }
-
   async function save() {
     if (!proposal?.entries.length) return;
     saving = true;
     error = '';
     try {
-      const existing = await services.storage.listPrograms();
-      const programIds: string[] = [];
-      for (const entry of proposal.entries) {
-        programIds.push((await programFor(entry, existing)).id);
-      }
+      const current = new Map(
+        (await services.storage.listPrograms()).map((program) => [program.id, program]),
+      );
+      if (proposal.entries.some((entry) => !current.has(entry.programId)))
+        throw new Error(
+          'A selected Program is no longer in this library. Generate the plan again.',
+        );
       const plan: ClassPlan = {
         id: services.newId(),
-        name: planName.trim() || 'AI playlist',
-        programIds,
+        name: planName.trim() || 'Workout-aware class',
+        programIds: proposal.entries.map((entry) => entry.programId),
       };
       await services.storage.saveClassPlan(plan);
       onsaved(plan.id);
@@ -107,105 +74,77 @@
 
 <main>
   <a class="back" href={hrefs.library()}>&larr; Library</a>
-  <span class="eyebrow">Catalog-grounded planning</span>
-  <h1>Plan with AI</h1>
+  <span class="eyebrow">Instructor-program planner</span>
+  <h1>Plan a class</h1>
   <p class="muted">
-    Describe the class you want. GRADE selects only analyzed songs in the server catalog; you remain
-    in control of the order and the detailed ride instructions.
+    Builds only from your existing, programmed rides. Program IDs, section boundaries, and every
+    instructor cue stay unchanged.
   </p>
-
   {#if error}<div class="banner error" role="alert">{error}</div>{/if}
-
   <form
     onsubmit={(event) => {
       event.preventDefault();
-      void generate();
+      generate();
     }}
   >
-    <label>
-      Playlist request or revision
-      <textarea
+    <label
+      >Class request<textarea
         bind:value={request}
         rows="4"
-        placeholder="Make me a 10-song Rihanna class with five hills, four sprints, and one surprise."
-      ></textarea>
-    </label>
-    <button class="primary" type="submit" disabled={!request.trim() || working}>
-      {working ? 'Planning…' : proposal ? 'Revise playlist' : 'Generate playlist'}
-    </button>
+        placeholder="Build a 30-minute cycling class with a warmup, two climbs, sprint intervals, and a cooldown."
+      ></textarea></label
+    >
+    <button class="primary" type="submit" disabled={!request.trim() || loading}
+      >{loading ? 'Reading library…' : 'Build from my Programs'}</button
+    >
   </form>
-
   {#if proposal}
     <section aria-live="polite">
       <div class="heading">
         <div>
-          <span class="eyebrow">{proposal.status}</span>
-          <h2>{proposal.summary}</h2>
+          <span class="eyebrow">{proposal.entries.length ? 'ready' : 'cannot match'}</span>
+          <h2>{proposal.entries.length} existing Programs · {proposal.actualMinutes} minutes</h2>
         </div>
-        <strong
-          >{formatTime(proposal.entries.reduce((sum, entry) => sum + entry.duration, 0))}</strong
-        >
       </div>
       <p class="muted interpretation-mode">
-        Interpretation: {proposal.interpretation_mode === 'openai-assisted'
-          ? 'OpenAI-assisted constraints'
-          : 'deterministic local constraints'} · Song selection: catalog scoring from tempo and analyzed
-        energy
+        Planning: deterministic local workout scoring (no model call) · Library: {proposal.eligibleCount}
+        instructor-authored eligible, {proposal.excludedCount} unprogrammed/AI draft excluded
       </p>
-
-      {#if proposal.shortfalls.length}
-        <div class="banner shortfall">
-          <strong>The catalog cannot fully satisfy this request.</strong>
+      {#if proposal.shortfalls.length}<div class="banner shortfall">
+          <strong>Library limitations</strong>
           <ul>
             {#each proposal.shortfalls as shortfall (shortfall)}<li>{shortfall}</li>{/each}
           </ul>
-        </div>
-      {/if}
-
+        </div>{/if}
       <ol class="playlist">
-        {#each proposal.entries as entry, index (entry.track_id)}
+        {#each proposal.entries as entry, index (entry.programId)}
           <li class="card">
             <div class="song">
-              <span class="role">{entry.purpose}</span>
-              <strong>{entry.title}</strong>
-              <span class="muted">
-                {entry.bpm ? `${Math.round(entry.bpm)} BPM · ` : ''}{formatTime(entry.duration)}
-              </span>
+              <span class="role">{entry.role}</span><strong>{entry.name}</strong><span class="muted"
+                >{formatTime(entry.duration)} · Program ID {entry.programId}</span
+              >
               <p>{entry.explanation}</p>
             </div>
             <div class="row controls">
-              <button
+              <button type="button" disabled={index === 0} onclick={() => move(index, -1)}
+                >Up</button
+              ><button
                 type="button"
-                aria-label={`Move ${entry.title} up`}
-                disabled={index === 0}
-                onclick={() => move(index, -1)}>Up</button
-              >
-              <button
-                type="button"
-                aria-label={`Move ${entry.title} down`}
                 disabled={index === proposal!.entries.length - 1}
                 onclick={() => move(index, 1)}>Down</button
-              >
-              <button type="button" onclick={() => replace(index)} disabled={working}
-                >Replace</button
-              >
-              <button type="button" class="danger" onclick={() => remove(index)}>Remove</button>
+              ><button type="button" class="danger" onclick={() => remove(index)}>Remove</button>
             </div>
           </li>
         {/each}
       </ol>
-
-      {#if proposal.entries.length}
-        <div class="save card">
-          <label>
-            Class plan name
-            <input bind:value={planName} />
-          </label>
-          <button class="primary" type="button" onclick={save} disabled={saving}>
-            {saving ? 'Saving…' : 'Save as class plan'}
-          </button>
-        </div>
-      {/if}
+      {#if proposal.entries.length}<div class="save card">
+          <label>Class plan name<input bind:value={planName} /></label><button
+            class="primary"
+            type="button"
+            onclick={save}
+            disabled={saving}>{saving ? 'Saving…' : 'Save existing Programs as ClassPlan'}</button
+          >
+        </div>{/if}
     </section>
   {/if}
 </main>
@@ -245,9 +184,6 @@
   }
   .shortfall {
     margin: 20px 0;
-  }
-  .shortfall ul {
-    margin-bottom: 0;
   }
   .playlist {
     list-style: none;

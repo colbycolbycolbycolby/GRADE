@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { makeServices, track, type TestServices } from '../testing/fixtures';
+import {
+  makeAnalysis,
+  makeProgram,
+  makeServices,
+  track,
+  type TestServices,
+} from '../testing/fixtures';
 import {
   button,
   byLabel,
@@ -237,28 +243,37 @@ describe('App', () => {
     );
   });
 
-  test('AI request uses a real analyzed song and saves a playable class plan', async () => {
+  test('planner reuses an instructor Program unchanged and saves a playable class plan', async () => {
+    const instructorProgram = makeProgram('Instructor hill');
+    instructorProgram.segments[0] = {
+      ...instructorProgram.segments[0]!,
+      label: 'Climb Z4 60 standing',
+    };
+    await services.storage.saveTrack(track);
+    await services.storage.saveAnalysis(makeAnalysis());
+    await services.storage.saveProgram(instructorProgram);
     const root = await start('#/planner');
     await setValue(
       root.querySelector<HTMLTextAreaElement>('textarea')!,
       'Make me one hill song.',
       'input',
     );
-    await click(button(root, 'Generate playlist'));
     await until(
       () => root.textContent ?? '',
-      (text) => /sustained energy suits loaded resistance/.test(text),
+      (text) => /Build from my Programs/.test(text),
     );
-    await click(button(root, 'Save as class plan'));
+    await click(button(root, 'Build from my Programs'));
+    await until(
+      () => root.textContent ?? '',
+      (text) => /Instructor hill/.test(text),
+    );
+    await click(button(root, 'Save existing Programs as ClassPlan'));
     await until(
       () => location.hash,
       (hash) => /^#\/plan\//.test(hash),
     );
     expect((await services.storage.listClassPlans())[0]?.programIds).toHaveLength(1);
-    expect((await services.storage.listPrograms())[0]).toMatchObject({
-      trackId: track.id,
-      name: 'Test Song — AI draft',
-    });
+    expect(await services.storage.listPrograms()).toEqual([instructorProgram]);
     await until(
       () => root.textContent ?? '',
       (text) => /Start class/.test(text),
